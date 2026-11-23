@@ -197,7 +197,7 @@ fun SwipeActionRow(
                 Box(
                     Modifier.fillMaxWidth().padding(
                         start = if (swipeRight != SwipeAction.NONE) 42.dp else 0.dp,
-                        end = if (swipeLeft != SwipeAction.NONE) 48.dp else 0.dp,
+                        end = if (swipeLeft != SwipeAction.NONE) 68.dp else 0.dp,
                     )
                 ) {
                     content()
