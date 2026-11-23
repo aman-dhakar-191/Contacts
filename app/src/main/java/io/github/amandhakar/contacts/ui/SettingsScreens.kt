@@ -221,6 +221,13 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     "Sends crashes and anonymous usage (screens, which recording input works). Never names, numbers, accounts or call content.",
                     onClick = { telemetryOn = !telemetryOn; io.github.amandhakar.contacts.util.Telemetry.setEnabled(telemetryOn) },
                     trailing = { Switch(telemetryOn, { telemetryOn = it; io.github.amandhakar.contacts.util.Telemetry.setEnabled(it) }) })
+                InfoRow(Icons.Filled.Phone, "Live call chip / island", io.github.amandhakar.contacts.call.Notifications.liveUpdateStatus(ctx), onClick = {
+                    try {
+                        ctx.startActivity(Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS").putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+                    } catch (_: Exception) {
+                        try { ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)) } catch (_: Exception) {}
+                    }
+                })
                 InfoRow(Icons.Filled.Science, "Send a test report", "A harmless non-fatal report, to check it reaches Firebase", onClick = {
                     io.github.amandhakar.contacts.util.Telemetry.nonFatal("settings_test_report", RuntimeException("Test report from Settings"))
                     io.github.amandhakar.contacts.util.Telemetry.event("test_report")
