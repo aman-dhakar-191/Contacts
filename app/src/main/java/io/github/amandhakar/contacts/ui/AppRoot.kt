@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,6 +39,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,22 +65,34 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
         Screen.Accounts -> "accounts"
     }
     androidx.compose.runtime.LaunchedEffect(screenName) { io.github.amandhakar.contacts.util.Telemetry.screen(screenName) }
+    val calls by io.github.amandhakar.contacts.call.CallHub.calls.collectAsState()
+    val liveCall = calls.firstOrNull { it.state == android.telecom.Call.STATE_RINGING } ?: calls.firstOrNull()
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!vm.permissionsOk && !vm.skipPermissions) {
             Onboarding(requestPermissions) { vm.skipPermissions = true }
             return@Surface
         }
-        when (val top = vm.stack.lastOrNull()) {
-            null -> MainTabs(vm, requestDefaultDialer)
-            is Screen.Detail -> DetailScreen(vm, top.id)
-            is Screen.Edit -> EditScreen(vm, top.id, top.number)
-            Screen.Settings -> SettingsScreen(vm, requestPermissions, requestDefaultDialer)
-            Screen.Blocked -> BlockedScreen(vm)
-            Screen.Recordings -> RecordingsScreen(vm)
-            Screen.Merge -> MergeScreen(vm)
-            Screen.RecordTest -> RecordingTestScreen(vm)
-            Screen.RecordList -> RecordListScreen(vm)
-            Screen.Accounts -> AccountsScreen(vm)
+        Column(Modifier.fillMaxSize()) {
+            // The banner takes the status-bar space, so the screen below must not add it a second time.
+            if (liveCall != null) CallBanner(liveCall)
+            Box(
+                Modifier.weight(1f).fillMaxWidth().then(
+                    if (liveCall != null) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier,
+                ),
+            ) {
+                when (val top = vm.stack.lastOrNull()) {
+                    null -> MainTabs(vm, requestDefaultDialer)
+                    is Screen.Detail -> DetailScreen(vm, top.id)
+                    is Screen.Edit -> EditScreen(vm, top.id, top.number)
+                    Screen.Settings -> SettingsScreen(vm, requestPermissions, requestDefaultDialer)
+                    Screen.Blocked -> BlockedScreen(vm)
+                    Screen.Recordings -> RecordingsScreen(vm)
+                    Screen.Merge -> MergeScreen(vm)
+                    Screen.RecordTest -> RecordingTestScreen(vm)
+                    Screen.RecordList -> RecordListScreen(vm)
+                    Screen.Accounts -> AccountsScreen(vm)
+                }
+            }
         }
     }
 }

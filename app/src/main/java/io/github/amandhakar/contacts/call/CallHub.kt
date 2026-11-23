@@ -62,6 +62,11 @@ object CallHub {
         }
     }
 
+    /** The call the live notification and its buttons act on: the first one that is not ringing or ending. */
+    fun current(): CallInfo? = _calls.value.firstOrNull {
+        it.state != Call.STATE_RINGING && it.state != Call.STATE_DISCONNECTED && it.state != Call.STATE_DISCONNECTING
+    }
+
     fun ringing(): CallInfo? = _calls.value.firstOrNull { it.state == Call.STATE_RINGING }
 
     fun answer(call: Call) = call.answer(VideoProfile.STATE_AUDIO_ONLY)
