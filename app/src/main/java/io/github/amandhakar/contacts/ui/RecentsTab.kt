@@ -54,6 +54,7 @@ import io.github.amandhakar.contacts.AppViewModel
 import io.github.amandhakar.contacts.Screen
 import io.github.amandhakar.contacts.call.Dialer
 import io.github.amandhakar.contacts.data.CallEntry
+import io.github.amandhakar.contacts.data.SwipeAction
 import io.github.amandhakar.contacts.util.PhoneUtil
 import java.text.DateFormat
 import java.util.Calendar
@@ -124,7 +125,7 @@ fun RecentsTab(vm: AppViewModel) {
                 items(list, key = { it.id }) { e ->
                     val contact = index[PhoneUtil.key(e.number)]
                     val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() } ?: e.number.ifBlank { "Unknown" }
-                    CallRow(vm, e, name, contact?.id, contact?.photoUri, onCall = { Dialer.call(ctx, e.number) })
+                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, onCall = { Dialer.call(ctx, e.number) })
                 }
             }
         }
@@ -132,7 +133,7 @@ fun RecentsTab(vm: AppViewModel) {
 }
 
 @Composable
-private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, onCall: () -> Unit) {
+private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, onCall: () -> Unit) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val missed = e.type == CallLog.Calls.MISSED_TYPE || e.type == CallLog.Calls.REJECTED_TYPE
@@ -142,51 +143,81 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
         CallLog.Calls.BLOCKED_TYPE -> Icons.Filled.Block
         else -> Icons.Filled.CallMissed
     }
-    Box(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().combinedClickable(
-                onClick = { if (e.number.isNotBlank()) onCall() },
-                onLongClick = { menu = true },
-            ).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Avatar(name, photo, 48.dp)
-            Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(icon, null, Modifier.padding(end = 4.dp), tint = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(e.date)) + durationText(e),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+    fun canPerform(action: SwipeAction): Boolean = when (action) {
+        SwipeAction.NONE -> false
+        SwipeAction.CALL, SwipeAction.MESSAGE, SwipeAction.WHATSAPP -> e.number.isNotBlank()
+        SwipeAction.FAVORITE -> contactId != null
+        SwipeAction.VIEW_CONTACT -> true
+    }
+    fun perform(action: SwipeAction) {
+        when (action) {
+            SwipeAction.CALL -> if (e.number.isNotBlank()) Dialer.call(ctx, e.number)
+            SwipeAction.MESSAGE -> if (e.number.isNotBlank()) {
+                try { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${e.number}"))) } catch (_: Exception) {}
+            }
+            SwipeAction.VIEW_CONTACT -> if (contactId != null) vm.push(Screen.Detail(contactId))
+                else if (e.number.isNotBlank()) vm.push(Screen.Edit(null, e.number))
+            SwipeAction.FAVORITE -> contactId?.let { vm.setStarred(it, !starred) }
+            SwipeAction.WHATSAPP -> if (e.number.isNotBlank()) {
+                try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${PhoneUtil.digits(e.number)}"))) } catch (_: Exception) {}
+            }
+            SwipeAction.NONE -> Unit
+        }
+    }
+    val leftAction = vm.swipeLeftAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+    val rightAction = vm.swipeRightAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+    SwipeActionRow(
+        swipeLeft = leftAction,
+        swipeRight = rightAction,
+        onSwipeLeft = { perform(leftAction) },
+        onSwipeRight = { perform(rightAction) },
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().combinedClickable(
+                    onClick = { if (e.number.isNotBlank()) onCall() },
+                    onLongClick = { menu = true },
+                ).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Avatar(name, photo, 48.dp)
+                Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, null, Modifier.padding(end = 4.dp), tint = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(e.date)) + durationText(e),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            if (contactId != null) {
-                DropdownMenuItem(text = { Text("View contact") }, onClick = { menu = false; vm.push(Screen.Detail(contactId)) })
-            } else if (e.number.isNotBlank()) {
-                DropdownMenuItem(text = { Text("Add to contacts") }, onClick = { menu = false; vm.push(Screen.Edit(null, e.number)) })
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                if (contactId != null) {
+                    DropdownMenuItem(text = { Text("View contact") }, onClick = { menu = false; vm.push(Screen.Detail(contactId)) })
+                } else if (e.number.isNotBlank()) {
+                    DropdownMenuItem(text = { Text("Add to contacts") }, onClick = { menu = false; vm.push(Screen.Edit(null, e.number)) })
+                }
+                if (e.number.isNotBlank()) {
+                    DropdownMenuItem(text = { Text("Send message") }, onClick = {
+                        menu = false
+                        try { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${e.number}"))) } catch (_: Exception) {}
+                    })
+                    val rules = io.github.amandhakar.contacts.data.RecordRules(ctx)
+                    val always = rules.contains(e.number)
+                    DropdownMenuItem(text = { Text(if (always) "Stop auto-recording" else "Always record") }, onClick = {
+                        menu = false
+                        if (always) rules.remove(e.number) else rules.add(e.number, name.takeIf { it != e.number })
+                        Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
+                    })
+                    DropdownMenuItem(text = { Text("Block number") }, onClick = {
+                        menu = false
+                        val ok = vm.blockedRepo.block(e.number)
+                        Toast.makeText(ctx, if (ok) "Blocked ${e.number}" else "Set as default phone app to block numbers", Toast.LENGTH_SHORT).show()
+                    })
+                }
+                DropdownMenuItem(text = { Text("Delete entry") }, onClick = { menu = false; vm.deleteCall(e.id) })
             }
-            if (e.number.isNotBlank()) {
-                DropdownMenuItem(text = { Text("Send message") }, onClick = {
-                    menu = false
-                    try { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${e.number}"))) } catch (_: Exception) {}
-                })
-                val rules = io.github.amandhakar.contacts.data.RecordRules(ctx)
-                val always = rules.contains(e.number)
-                DropdownMenuItem(text = { Text(if (always) "Stop auto-recording" else "Always record") }, onClick = {
-                    menu = false
-                    if (always) rules.remove(e.number) else rules.add(e.number, name.takeIf { it != e.number })
-                    Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
-                })
-                DropdownMenuItem(text = { Text("Block number") }, onClick = {
-                    menu = false
-                    val ok = vm.blockedRepo.block(e.number)
-                    Toast.makeText(ctx, if (ok) "Blocked ${e.number}" else "Set as default phone app to block numbers", Toast.LENGTH_SHORT).show()
-                })
-            }
-            DropdownMenuItem(text = { Text("Delete entry") }, onClick = { menu = false; vm.deleteCall(e.id) })
         }
     }
 }

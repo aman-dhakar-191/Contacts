@@ -2,8 +2,31 @@ package io.github.amandhakar.contacts.data
 
 import android.content.Context
 
+enum class SwipeAction(val label: String, val key: String) {
+    CALL("Call", "call"),
+    MESSAGE("Message", "message"),
+    VIEW_CONTACT("View contact", "view"),
+    FAVORITE("Favorite", "favorite"),
+    WHATSAPP("WhatsApp", "whatsapp"),
+    NONE("None", "none");
+
+    companion object {
+        fun fromKey(key: String): SwipeAction = values().firstOrNull { it.key == key } ?: NONE
+        fun fromStringOrDefault(value: String?, fallback: String): SwipeAction = fromKey(value ?: fallback)
+    }
+}
+
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    /** One global gesture mapping shared by Recents and Contacts. */
+    var swipeLeftAction: SwipeAction
+        get() = SwipeAction.fromKey(sp.getString("swipe_left_action", "message") ?: "message")
+        set(v) = sp.edit().putString("swipe_left_action", v.key).apply()
+
+    var swipeRightAction: SwipeAction
+        get() = SwipeAction.fromStringOrDefault(sp.getString("swipe_right_action", "call"), "call")
+        set(v) = sp.edit().putString("swipe_right_action", v.key).apply()
 
     var autoRecord: Boolean
         get() = sp.getBoolean("auto_record", false)
