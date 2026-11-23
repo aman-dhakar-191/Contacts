@@ -5,6 +5,7 @@ import android.telecom.CallAudioState
 import android.telecom.InCallService
 import android.telecom.VideoProfile
 import io.github.amandhakar.contacts.data.CallerInfo
+import io.github.amandhakar.contacts.identifier.Tag
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
@@ -17,12 +18,15 @@ data class CallInfo(
     val state: Int,
     val incoming: Boolean,
     val connectTimeMillis: Long,
+    /** Category given by the identifier, if it is on and something matched. */
+    val tag: Tag? = null,
 )
 
 /** The calls Android Telecom is currently showing us, as snapshots the UI can observe. */
 object CallHub {
     private val tracked = ArrayList<Call>()
     private val callers = HashMap<Call, CallerInfo>()
+    private val tags = HashMap<Call, Tag>()
     private val _calls = MutableStateFlow<List<CallInfo>>(emptyList())
     val calls: StateFlow<List<CallInfo>> = _calls
 
@@ -36,7 +40,12 @@ object CallHub {
 
     @Synchronized fun add(call: Call) { if (call !in tracked) tracked += call; refresh() }
 
-    @Synchronized fun remove(call: Call) { tracked -= call; callers -= call; refresh() }
+    @Synchronized fun remove(call: Call) { tracked -= call; callers -= call; tags -= call; refresh() }
+
+    @Synchronized fun setTag(call: Call, tag: Tag?) {
+        if (tag != null) tags[call] = tag else tags.remove(call)
+        refresh()
+    }
 
     @Synchronized fun setCaller(call: Call, info: CallerInfo?) {
         if (info != null) callers[call] = info
@@ -58,6 +67,7 @@ object CallHub {
                 state = c.state,
                 incoming = d.callDirection == Call.Details.DIRECTION_INCOMING,
                 connectTimeMillis = d.connectTimeMillis,
+                tag = tags[c],
             )
         }
     }

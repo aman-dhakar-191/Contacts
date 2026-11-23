@@ -44,7 +44,16 @@ class CallService : InCallService() {
         Telemetry.event("call_added", "incoming" to (call.details.callDirection == Call.Details.DIRECTION_INCOMING))
 
         val number = call.details.handle?.schemeSpecificPart ?: ""
-        scope.launch { CallHub.setCaller(call, ContactsRepo(applicationContext).lookup(number)); updateNotifications() }
+        val incomingCall = call.details.callDirection == Call.Details.DIRECTION_INCOMING
+        scope.launch {
+            val caller = ContactsRepo(applicationContext).lookup(number)
+            CallHub.setCaller(call, caller)
+            updateNotifications()
+            // Categorise it (only does anything when the identifier is on); logged either way
+            val tag = io.github.amandhakar.contacts.identifier.Identifier.classifyLive(applicationContext, number, caller?.name, incomingCall)
+            CallHub.setTag(call, tag)
+            updateNotifications()
+        }
 
         updateNotifications()
         if (call.state != Call.STATE_RINGING) openCallScreen()
@@ -78,7 +87,7 @@ class CallService : InCallService() {
         val calls = CallHub.calls.value
         val ringing = calls.firstOrNull { it.state == Call.STATE_RINGING }
         if (ringing != null) {
-            val key = "${System.identityHashCode(ringing.call)}:${ringing.name}"
+            val key = "${System.identityHashCode(ringing.call)}:${ringing.name}:${ringing.tag?.name}"
             if (key != incomingShown) { incomingShown = key; Notifications.incoming(this, ringing) }
         } else if (incomingShown != null) {
             incomingShown = null

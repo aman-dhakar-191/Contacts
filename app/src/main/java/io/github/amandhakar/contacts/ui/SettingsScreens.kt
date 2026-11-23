@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
@@ -241,6 +242,17 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                             vm.updateSwipeRightAction(it)
                         }
                     },
+                )
+            }
+
+            SectionLabel("Identifier")
+            GroupCard {
+                val idStore = remember { io.github.amandhakar.contacts.identifier.Store.get(ctx) }
+                val idRules = remember { idStore.rules() }
+                InfoRow(
+                    Icons.Filled.Shield, "Call identifier",
+                    if (vm.prefs.identifierOn) "On · ${idRules.count { it.enabled }} of ${idRules.size} rules on" else "Off · categorise calls by rules or manual flags",
+                    onClick = { vm.push(Screen.Identifier) },
                 )
             }
 

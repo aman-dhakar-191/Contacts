@@ -82,6 +82,7 @@ fun RecentsTab(vm: AppViewModel) {
     val ctx = LocalContext.current
     val history by vm.history.collectAsState()
     val index by vm.numberIndex.collectAsState()
+    val tags by vm.identified.collectAsState()
     var filter by filterState
 
     LaunchedEffect(Unit) { vm.markMissedRead() }
@@ -125,7 +126,7 @@ fun RecentsTab(vm: AppViewModel) {
                 items(list, key = { it.id }) { e ->
                     val contact = index[PhoneUtil.key(e.number)]
                     val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() } ?: e.number.ifBlank { "Unknown" }
-                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, onCall = { Dialer.call(ctx, e.number) })
+                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id], onCall = { Dialer.call(ctx, e.number) })
                 }
             }
         }
@@ -133,9 +134,10 @@ fun RecentsTab(vm: AppViewModel) {
 }
 
 @Composable
-private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, onCall: () -> Unit) {
+private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, tag: io.github.amandhakar.contacts.identifier.Tag?, onCall: () -> Unit) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    var flagging by remember { mutableStateOf(false) }
     val missed = e.type == CallLog.Calls.MISSED_TYPE || e.type == CallLog.Calls.REJECTED_TYPE
     val icon = when (e.type) {
         CallLog.Calls.INCOMING_TYPE -> Icons.Filled.CallReceived
@@ -182,7 +184,13 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
             ) {
                 Avatar(name, photo, 48.dp)
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                    Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (tag != null) CategoryChip(tag.name, tag.color, Modifier.padding(start = 8.dp))
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(icon, null, Modifier.padding(end = 4.dp), tint = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
@@ -210,6 +218,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                         if (always) rules.remove(e.number) else rules.add(e.number, name.takeIf { it != e.number })
                         Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
                     })
+                    DropdownMenuItem(text = { Text("Flag as…") }, onClick = { menu = false; flagging = true })
                     DropdownMenuItem(text = { Text("Block number") }, onClick = {
                         menu = false
                         val ok = vm.blockedRepo.block(e.number)
@@ -218,6 +227,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                 }
                 DropdownMenuItem(text = { Text("Delete entry") }, onClick = { menu = false; vm.deleteCall(e.id) })
             }
+            if (flagging) FlagDialog(vm, e.number, name.takeIf { it != e.number }) { flagging = false }
         }
     }
 }

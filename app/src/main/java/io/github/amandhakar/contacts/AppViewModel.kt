@@ -45,6 +45,9 @@ sealed interface Screen {
     data object RecordTest : Screen
     data object RecordList : Screen
     data object Accounts : Screen
+    data object Identifier : Screen
+    data class IdentifierRule(val id: Long) : Screen
+    data object IdentifierLog : Screen
 }
 
 val REQUIRED_PERMISSIONS = arrayOf(
@@ -88,6 +91,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val numberIndex: StateFlow<Map<String, ContactSummary>> = _numberIndex
     private val _groupMembers = MutableStateFlow<Set<Long>>(emptySet())
     val groupMembers: StateFlow<Set<Long>> = _groupMembers
+
+    private val _identified = MutableStateFlow<Map<Long, io.github.amandhakar.contacts.identifier.Tag>>(emptyMap())
+    /** call-log row id -> its category, while the identifier is on. */
+    val identified: StateFlow<Map<Long, io.github.amandhakar.contacts.identifier.Tag>> = _identified
 
     private val _totalPeople = MutableStateFlow(0)
     /** Every contact on the phone, ignoring which accounts are shown. */
@@ -168,7 +175,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             _numberIndex.value = idx
             _groups.value = contactsRepo.groups()
             _accounts.value = contactsRepo.accounts()
-            _history.value = callLogRepo.load()
+            val hist = callLogRepo.load()
+            _history.value = hist
+            _identified.value = io.github.amandhakar.contacts.identifier.Identifier.processHistory(app, hist)
             _totalPeople.value = contactsRepo.countAll()
             refreshMembers()
         }

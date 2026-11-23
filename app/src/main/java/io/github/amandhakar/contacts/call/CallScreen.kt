@@ -107,6 +107,14 @@ fun CallScreen(onClose: () -> Unit) {
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
             Spacer(Modifier.height(8.dp))
             Text(statusText(shown, primary == null, now), color = Color(0xFFB0B8C0), fontSize = 18.sp)
+            shown.tag?.let { t ->
+                Spacer(Modifier.height(10.dp))
+                io.github.amandhakar.contacts.ui.CategoryChip(t.name, t.color)
+                Text(
+                    if (t.via == io.github.amandhakar.contacts.identifier.Via.MANUAL) "flagged by you" else "rule: ${t.ruleName ?: ""}",
+                    color = Color(0xFF8A939B), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             if (recording) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
