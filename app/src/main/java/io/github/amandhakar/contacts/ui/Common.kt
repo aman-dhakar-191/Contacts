@@ -126,8 +126,8 @@ fun Avatar(name: String, photoUri: String?, size: Dp = 48.dp) {
 
 
 /**
- * A row with configurable global swipe actions. Swiping only reveals the action;
- * the user must tap the revealed action to perform it.
+ * A row with configurable global swipe actions. Action panes stay behind the
+ * row and an intentional swipe past the threshold executes the action directly.
  */
 @Composable
 fun SwipeActionRow(
@@ -139,44 +139,50 @@ fun SwipeActionRow(
 ) {
     val revealWidth = 88.dp
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
-    var settledOffset by remember { mutableFloatStateOf(0f) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
-    val animatedOffset by animateFloatAsState(settledOffset, label = "swipe row offset")
-    val latestAnimatedOffset by rememberUpdatedState(animatedOffset)
+    val latestOnSwipeLeft by rememberUpdatedState(onSwipeLeft)
+    val latestOnSwipeRight by rememberUpdatedState(onSwipeRight)
     val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
 
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
-                SwipeActionSlot(swipeRight.label, { settledOffset = 0f; dragOffset = 0f; onSwipeRight() }, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeRight.label, Modifier.width(revealWidth))
             }
             Spacer(Modifier.weight(1f))
             if (swipeLeft != SwipeAction.NONE) {
-                SwipeActionSlot(swipeLeft.label, { settledOffset = 0f; dragOffset = 0f; onSwipeLeft() }, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeLeft.label, Modifier.width(revealWidth))
             }
         }
         Box(
             Modifier.fillMaxWidth()
-                .offset { IntOffset((if (dragging) dragOffset else animatedOffset).roundToInt(), 0) }
+                .background(MaterialTheme.colorScheme.surface)
+                .offset { IntOffset((if (dragging) dragOffset else 0f).roundToInt(), 0) }
                 .pointerInput(swipeLeft, swipeRight, revealPx) {
                     detectHorizontalDragGestures(
                         onDragStart = {
                             dragging = true
-                            dragOffset = latestAnimatedOffset
+                            dragOffset = 0f
                         },
                         onHorizontalDrag = { change, amount ->
                             change.consume()
                             dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
                         },
                         onDragEnd = {
-                            settledOffset = if (abs(dragOffset) >= revealPx * 0.42f) {
-                                if (dragOffset > 0f) revealPx else -revealPx
-                            } else 0f
+                            val completedOffset = dragOffset
                             dragging = false
+                            dragOffset = 0f
+                            if (abs(completedOffset) >= revealPx * 0.42f) {
+                                if (completedOffset > 0f) latestOnSwipeRight()
+                                else latestOnSwipeLeft()
+                            }
                         },
-                        onDragCancel = { dragging = false; dragOffset = 0f; settledOffset = 0f },
+                        onDragCancel = {
+                            dragging = false
+                            dragOffset = 0f
+                        },
                     )
                 },
         ) {
@@ -186,10 +192,10 @@ fun SwipeActionRow(
 }
 
 @Composable
-private fun SwipeActionSlot(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SwipeActionSlot(label: String, modifier: Modifier = Modifier) {
     Box(
         modifier.fillMaxHeight().background(MaterialTheme.colorScheme.secondaryContainer)
-            .clickable(onClick = onClick).padding(horizontal = 6.dp),
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
