@@ -228,7 +228,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     trailing = {
                         SwipeActionPicker(swipeLeft) {
                             swipeLeft = it
-                            vm.setSwipeLeftAction(it)
+                            vm.updateSwipeLeftAction(it)
                         }
                     },
                 )
@@ -238,7 +238,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     trailing = {
                         SwipeActionPicker(swipeRight) {
                             swipeRight = it
-                            vm.setSwipeRightAction(it)
+                            vm.updateSwipeRightAction(it)
                         }
                     },
                 )

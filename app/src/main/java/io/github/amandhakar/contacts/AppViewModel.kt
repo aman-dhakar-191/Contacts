@@ -112,12 +112,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setSwipeLeftAction(action: SwipeAction) {
+    fun updateSwipeLeftAction(action: SwipeAction) {
         prefs.swipeLeftAction = action
         swipeLeftAction = action
     }
 
-    fun setSwipeRightAction(action: SwipeAction) {
+    fun updateSwipeRightAction(action: SwipeAction) {
         prefs.swipeRightAction = action
         swipeRightAction = action
     }
