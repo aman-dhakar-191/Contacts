@@ -6,9 +6,13 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.matchParentSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,9 +29,20 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.amandhakar.contacts.data.SwipeAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -104,6 +120,78 @@ fun Avatar(name: String, photoUri: String?, size: Dp = 48.dp) {
         val b = bmp
         if (b != null) Image(b.asImageBitmap(), null, Modifier.size(size), contentScale = ContentScale.Crop)
         else Text(letter, color = Color.White, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+
+/**
+ * A row with configurable global swipe actions. Swiping only reveals the action;
+ * the user must tap the revealed action to perform it.
+ */
+@Composable
+fun SwipeActionRow(
+    swipeLeft: SwipeAction,
+    swipeRight: SwipeAction,
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val revealWidth = 88.dp
+    val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
+    var settledOffset by remember { mutableFloatStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val animatedOffset by animateFloatAsState(settledOffset, label = "swipe row offset")
+    val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
+    val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
+
+    Box(Modifier.fillMaxWidth()) {
+        Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
+            if (swipeRight != SwipeAction.NONE) {
+                SwipeActionSlot(swipeRight.label, onSwipeRight, Modifier.width(revealWidth))
+            }
+            Spacer(Modifier.weight(1f))
+            if (swipeLeft != SwipeAction.NONE) {
+                SwipeActionSlot(swipeLeft.label, onSwipeLeft, Modifier.width(revealWidth))
+            }
+        }
+        Box(
+            Modifier.fillMaxWidth()
+                .offset { IntOffset((animatedOffset + dragOffset).roundToInt(), 0) }
+                .pointerInput(swipeLeft, swipeRight, revealPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragOffset = 0f },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            dragOffset = (animatedOffset + dragOffset + amount - animatedOffset)
+                                .coerceIn(minOffset - animatedOffset, maxOffset - animatedOffset)
+                        },
+                        onDragEnd = {
+                            val target = (animatedOffset + dragOffset).coerceIn(minOffset, maxOffset)
+                            settledOffset = if (abs(target) >= revealPx * 0.42f) {
+                                if (target > 0f) revealPx else -revealPx
+                            } else 0f
+                            dragOffset = 0f
+                        },
+                        onDragCancel = { dragOffset = 0f; settledOffset = 0f },
+                    )
+                },
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionSlot(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxHeight().background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = onClick).padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label, style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 2,
+        )
     }
 }
 
