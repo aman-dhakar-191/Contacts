@@ -146,11 +146,11 @@ fun SwipeActionRow(
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
-                SwipeActionSlot(swipeRight.label, onSwipeRight, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeRight.label, { settledOffset = 0f; dragOffset = 0f; onSwipeRight() }, Modifier.width(revealWidth))
             }
             Spacer(Modifier.weight(1f))
             if (swipeLeft != SwipeAction.NONE) {
-                SwipeActionSlot(swipeLeft.label, onSwipeLeft, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeLeft.label, { settledOffset = 0f; dragOffset = 0f; onSwipeLeft() }, Modifier.width(revealWidth))
             }
         }
         Box(
