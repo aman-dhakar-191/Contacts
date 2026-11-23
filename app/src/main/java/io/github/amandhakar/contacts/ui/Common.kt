@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -154,11 +155,11 @@ fun SwipeActionRow(
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
-                SwipeActionSlot(swipeRight.label, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeRight, Modifier.width(revealWidth))
             }
             Spacer(Modifier.weight(1f))
             if (swipeLeft != SwipeAction.NONE) {
-                SwipeActionSlot(swipeLeft.label, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeLeft, Modifier.width(revealWidth))
             }
         }
         Box(
@@ -191,28 +192,13 @@ fun SwipeActionRow(
                     )
                 },
         ) {
-            Box(Modifier.fillMaxWidth()) {
-                content()
-                // Show the actual configured action, not a generic swipe chevron.
-                if (swipeRight != SwipeAction.NONE) {
-                    SwipeActionIndicator(
-                        action = swipeRight,
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
-                    )
-                }
-                if (swipeLeft != SwipeAction.NONE) {
-                    SwipeActionIndicator(
-                        action = swipeLeft,
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
-                    )
-                }
-            }
+            content()
         }
     }
 }
 
 @Composable
-private fun SwipeActionIndicator(action: SwipeAction, modifier: Modifier = Modifier) {
+private fun SwipeActionSlot(action: SwipeAction, modifier: Modifier = Modifier) {
     val icon = when (action) {
         SwipeAction.CALL -> Icons.Filled.Call
         SwipeAction.MESSAGE -> Icons.Filled.Message
@@ -221,30 +207,24 @@ private fun SwipeActionIndicator(action: SwipeAction, modifier: Modifier = Modif
         SwipeAction.WHATSAPP -> Icons.Filled.Chat
         SwipeAction.NONE -> return
     }
-    Box(
-        modifier.size(30.dp).clip(CircleShape)
-            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f)),
-        contentAlignment = Alignment.Center,
+    Column(
+        modifier.fillMaxHeight()
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = "Swipe for ${action.label}",
-            modifier = Modifier.size(17.dp),
+            contentDescription = action.label,
+            modifier = Modifier.size(24.dp),
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
         )
-    }
-}
-
-@Composable
-private fun SwipeActionSlot(label: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier.fillMaxHeight().background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
         Text(
-            label, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 2,
+            action.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            maxLines = 1,
         )
     }
 }
