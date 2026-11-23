@@ -81,7 +81,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val stack = mutableStateListOf<Screen>()
     var tab by mutableStateOf(2)
     var dialPrefill by mutableStateOf<String?>(null)
-    var selectedGroup by mutableStateOf<Long?>(null)
+    var selectedGroup by mutableStateOf<String?>(null) // label title; same-named labels from several accounts are one filter
     var permissionsOk by mutableStateOf(false)
     var skipPermissions by mutableStateOf(false)
     var isDefaultDialer by mutableStateOf(false)
@@ -143,14 +143,21 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             _groups.value = contactsRepo.groups()
             _accounts.value = contactsRepo.accounts()
             _history.value = callLogRepo.load()
-            selectedGroup?.let { _groupMembers.value = contactsRepo.groupMembers(it) }
+            refreshMembers()
         }
     }
 
-    fun selectGroup(id: Long?) {
-        selectedGroup = id
-        if (id == null) { _groupMembers.value = emptySet(); return }
-        viewModelScope.launch(Dispatchers.IO) { _groupMembers.value = contactsRepo.groupMembers(id) }
+    fun selectGroup(title: String?) {
+        selectedGroup = title
+        refreshMembers()
+    }
+
+    private fun refreshMembers() {
+        val t = selectedGroup
+        if (t == null) { _groupMembers.value = emptySet(); return }
+        viewModelScope.launch(Dispatchers.IO) {
+            _groupMembers.value = _groups.value.filter { it.title == t }.flatMap { contactsRepo.groupMembers(it.id) }.toSet()
+        }
     }
 
     fun setStarred(id: Long, starred: Boolean) {

@@ -83,7 +83,7 @@ fun CallScreen(onClose: () -> Unit) {
         recError?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); RecorderState.error.value = null }
     }
 
-    val bg = Color(0xFF101418)
+    val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg).safeDrawingPadding()) {
         if (shown == null) return@Box
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -205,7 +205,7 @@ private fun RoundButton(icon: ImageVector, label: String, color: Color, size: an
 private fun ToggleButton(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(width = 84.dp, height = 90.dp)) {
         Box(
-            Modifier.size(64.dp).clip(CircleShape).background(if (on) Color.White else Color(0xFF2A3038)).clickable(onClick = onClick),
+            Modifier.size(64.dp).clip(CircleShape).background(if (on) Color.White else Color(0xFF26352E)).clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(28.dp)) }
         Spacer(Modifier.height(4.dp))
