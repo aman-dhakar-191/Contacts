@@ -1,0 +1,180 @@
+package io.github.amandhakar.contacts
+
+import android.Manifest
+import android.app.Application
+import android.app.role.RoleManager
+import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.CallLog
+import android.provider.ContactsContract
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.amandhakar.contacts.data.AccountInfo
+import io.github.amandhakar.contacts.data.BlockedRepo
+import io.github.amandhakar.contacts.data.CallEntry
+import io.github.amandhakar.contacts.data.CallLogRepo
+import io.github.amandhakar.contacts.data.ContactDraft
+import io.github.amandhakar.contacts.data.ContactSummary
+import io.github.amandhakar.contacts.data.ContactsRepo
+import io.github.amandhakar.contacts.data.GroupInfo
+import io.github.amandhakar.contacts.data.PhoneEntry
+import io.github.amandhakar.contacts.data.Prefs
+import io.github.amandhakar.contacts.data.RecordingsRepo
+import io.github.amandhakar.contacts.util.PhoneUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+sealed interface Screen {
+    data class Detail(val id: Long) : Screen
+    data class Edit(val id: Long?, val number: String? = null) : Screen
+    data object Settings : Screen
+    data object Blocked : Screen
+    data object Recordings : Screen
+    data object Merge : Screen
+}
+
+val REQUIRED_PERMISSIONS = arrayOf(
+    Manifest.permission.READ_CONTACTS,
+    Manifest.permission.WRITE_CONTACTS,
+    Manifest.permission.READ_CALL_LOG,
+    Manifest.permission.WRITE_CALL_LOG,
+    Manifest.permission.CALL_PHONE,
+    Manifest.permission.READ_PHONE_STATE,
+    Manifest.permission.ANSWER_PHONE_CALLS,
+    Manifest.permission.RECORD_AUDIO,
+    Manifest.permission.POST_NOTIFICATIONS,
+)
+
+class AppViewModel(private val app: Application) : AndroidViewModel(app) {
+    val contactsRepo = ContactsRepo(app)
+    val callLogRepo = CallLogRepo(app)
+    val blockedRepo = BlockedRepo(app)
+    val recordingsRepo = RecordingsRepo(app)
+    val prefs = Prefs(app)
+
+    private val _contacts = MutableStateFlow<List<ContactSummary>>(emptyList())
+    val contacts: StateFlow<List<ContactSummary>> = _contacts
+    private val _phones = MutableStateFlow<Map<Long, List<PhoneEntry>>>(emptyMap())
+    val phones: StateFlow<Map<Long, List<PhoneEntry>>> = _phones
+    private val _history = MutableStateFlow<List<CallEntry>>(emptyList())
+    val history: StateFlow<List<CallEntry>> = _history
+    private val _groups = MutableStateFlow<List<GroupInfo>>(emptyList())
+    val groups: StateFlow<List<GroupInfo>> = _groups
+    private val _accounts = MutableStateFlow<List<AccountInfo>>(emptyList())
+    val accounts: StateFlow<List<AccountInfo>> = _accounts
+    private val _numberIndex = MutableStateFlow<Map<String, ContactSummary>>(emptyMap())
+    /** last-10-digits of a number -> the contact that owns it. */
+    val numberIndex: StateFlow<Map<String, ContactSummary>> = _numberIndex
+    private val _groupMembers = MutableStateFlow<Set<Long>>(emptySet())
+    val groupMembers: StateFlow<Set<Long>> = _groupMembers
+
+    val stack = mutableStateListOf<Screen>()
+    var tab by mutableStateOf(2)
+    var dialPrefill by mutableStateOf<String?>(null)
+    var selectedGroup by mutableStateOf<Long?>(null)
+    var permissionsOk by mutableStateOf(false)
+    var skipPermissions by mutableStateOf(false)
+    var isDefaultDialer by mutableStateOf(false)
+    var speedDialVersion by mutableStateOf(0)
+
+    private var observing = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val reloadRunnable = Runnable { reload() }
+    private val observer = object : ContentObserver(handler) {
+        override fun onChange(selfChange: Boolean) {
+            handler.removeCallbacks(reloadRunnable)
+            handler.postDelayed(reloadRunnable, 400)
+        }
+    }
+
+    fun push(s: Screen) { stack += s }
+    fun pop() { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
+
+    private fun granted(p: String) = ContextCompat.checkSelfPermission(app, p) == PackageManager.PERMISSION_GRANTED
+
+    /** Called on start and after the permission dialog. */
+    fun onPermissions() {
+        permissionsOk = granted(Manifest.permission.READ_CONTACTS) && granted(Manifest.permission.READ_CALL_LOG) &&
+            granted(Manifest.permission.CALL_PHONE)
+        refreshRole()
+        if (granted(Manifest.permission.READ_CONTACTS)) {
+            if (!observing) {
+                observing = true
+                try {
+                    app.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
+                    if (granted(Manifest.permission.READ_CALL_LOG)) {
+                        app.contentResolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, observer)
+                    }
+                } catch (_: SecurityException) {
+                    observing = false
+                }
+            }
+            reload()
+        }
+    }
+
+    fun refreshRole() {
+        isDefaultDialer = app.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_DIALER)
+    }
+
+    fun reload() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cs = contactsRepo.contacts()
+            val ph = contactsRepo.allPhones()
+            val byId = cs.associateBy { it.id }
+            val idx = HashMap<String, ContactSummary>()
+            for ((id, list) in ph) {
+                val c = byId[id] ?: continue
+                for (p in list) PhoneUtil.key(p.number).takeIf { it.isNotEmpty() }?.let { idx.putIfAbsent(it, c) }
+            }
+            _contacts.value = cs
+            _phones.value = ph
+            _numberIndex.value = idx
+            _groups.value = contactsRepo.groups()
+            _accounts.value = contactsRepo.accounts()
+            _history.value = callLogRepo.load()
+            selectedGroup?.let { _groupMembers.value = contactsRepo.groupMembers(it) }
+        }
+    }
+
+    fun selectGroup(id: Long?) {
+        selectedGroup = id
+        if (id == null) { _groupMembers.value = emptySet(); return }
+        viewModelScope.launch(Dispatchers.IO) { _groupMembers.value = contactsRepo.groupMembers(id) }
+    }
+
+    fun setStarred(id: Long, starred: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { contactsRepo.setStarred(id, starred); reload() }
+    }
+
+    fun saveContact(draft: ContactDraft, done: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { contactsRepo.save(draft) }
+            reload(); done(ok)
+        }
+    }
+
+    fun deleteContact(lookupKey: String) {
+        viewModelScope.launch(Dispatchers.IO) { contactsRepo.delete(lookupKey); reload() }
+    }
+
+    fun deleteCall(id: Long) { viewModelScope.launch(Dispatchers.IO) { callLogRepo.delete(id); reload() } }
+    fun clearHistory() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.clearAll(); reload() } }
+    fun markMissedRead() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.markMissedRead() } }
+
+    fun speedDial(slot: Int) = prefs.speedDial(slot)
+    fun setSpeedDial(slot: Int, name: String, number: String) { prefs.setSpeedDial(slot, name, number); speedDialVersion++ }
+
+    fun nameFor(number: String, cached: String?): String =
+        _numberIndex.value[PhoneUtil.key(number)]?.name ?: cached?.takeIf { it.isNotBlank() } ?: number.ifBlank { "Unknown" }
+}

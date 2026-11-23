@@ -1,0 +1,16 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+*.jks
+*.keystore
+captures/
+.kotlin/
+
+__pycache__/
+*.pyc
+
+# The experimental pre-release signing key is committed on purpose (see README)
+!keystore/experimental.jks
