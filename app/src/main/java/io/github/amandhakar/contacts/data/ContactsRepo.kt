@@ -27,6 +27,28 @@ import java.io.OutputStream
 class ContactsRepo(private val ctx: Context) {
     private val cr get() = ctx.contentResolver
 
+    /** Every contact on the phone, ignoring the account filter. */
+    fun countAll(): Int = try {
+        cr.query(Contacts.CONTENT_URI, arrayOf(Contacts._ID), null, null, null)?.use { it.count } ?: 0
+    } catch (_: SecurityException) {
+        0
+    }
+
+    /** Contacts that have a raw contact in a shown account, or null when nothing is hidden. */
+    private fun visibleIds(): Set<Long>? {
+        val hidden = Prefs(ctx).hiddenAccounts
+        if (hidden.isEmpty()) return null
+        val rows = ArrayList<Triple<Long, String?, String?>>()
+        try {
+            cr.query(
+                RawContacts.CONTENT_URI, arrayOf(RawContacts.CONTACT_ID, RawContacts.ACCOUNT_NAME, RawContacts.ACCOUNT_TYPE),
+                "${RawContacts.DELETED}=0", null, null,
+            )?.use { c -> while (c.moveToNext()) rows += Triple(c.getLong(0), c.getString(1), c.getString(2)) }
+        } catch (_: SecurityException) {
+        }
+        return AccountInfo.visibleContactIds(rows, hidden)
+    }
+
     fun contacts(): List<ContactSummary> {
         val out = ArrayList<ContactSummary>()
         try {
@@ -41,10 +63,11 @@ class ContactsRepo(private val ctx: Context) {
             }
         } catch (_: SecurityException) {
         }
-        return out
+        val visible = visibleIds() ?: return out
+        return out.filter { it.id in visible }
     }
 
-    /** contactId -> phone numbers, for every contact. */
+    /** contactId -> phone numbers, for every shown contact. */
     fun allPhones(): Map<Long, List<PhoneEntry>> {
         val out = HashMap<Long, MutableList<PhoneEntry>>()
         try {
@@ -61,7 +84,8 @@ class ContactsRepo(private val ctx: Context) {
             }
         } catch (_: SecurityException) {
         }
-        return out
+        val visible = visibleIds() ?: return out
+        return out.filterKeys { it in visible }
     }
 
     /** group id -> contact ids. */
@@ -93,7 +117,8 @@ class ContactsRepo(private val ctx: Context) {
             }
         } catch (_: SecurityException) {
         }
-        return out
+        val hidden = Prefs(ctx).hiddenAccounts
+        return if (hidden.isEmpty()) out else out.filter { AccountInfo.keyOf(it.accountName, it.accountType) !in hidden }
     }
 
     fun createGroup(title: String, account: AccountInfo?): Boolean = try {

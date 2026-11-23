@@ -12,7 +12,28 @@ data class PhoneEntry(val number: String, val label: String, val type: Int = 2)
 
 data class AccountInfo(val name: String?, val type: String?, val count: Int = 0) {
     val isGoogle get() = type == "com.google"
-    val title get() = if (name == null) "Phone only (not synced)" else name
+    val title: String get() = name ?: "Phone only (not synced)"
+
+    /** Stable id used to remember choices in settings; "|" is the phone-only account. */
+    val key: String get() = keyOf(name, type)
+
+    companion object {
+        fun keyOf(name: String?, type: String?) = "${type ?: ""}|${name ?: ""}"
+
+        /** Hidden set that shows only [shownKey] among [allKeys]; null shows everything. */
+        fun hiddenFor(shownKey: String?, allKeys: Collection<String>): Set<String> =
+            if (shownKey == null) emptySet() else allKeys.toSet() - shownKey
+
+        /** The one account that is shown, or null if all or several are. */
+        fun singleShown(hidden: Set<String>, allKeys: Collection<String>): String? {
+            if (hidden.isEmpty()) return null
+            return allKeys.distinct().filter { it !in hidden }.singleOrNull()
+        }
+
+        /** Contact ids that have at least one raw contact in a shown account. rows = (contactId, accountName, accountType). */
+        fun visibleContactIds(rows: List<Triple<Long, String?, String?>>, hidden: Set<String>): Set<Long> =
+            rows.filter { keyOf(it.second, it.third) !in hidden }.map { it.first }.toSet()
+    }
 }
 
 data class GroupInfo(val id: Long, val title: String, val accountName: String?, val accountType: String?)

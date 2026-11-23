@@ -108,7 +108,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
             val n = withContext(Dispatchers.IO) {
                 try {
                     val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: ""
-                    vm.contactsRepo.importVcf(text, google.firstOrNull())
+                    vm.contactsRepo.importVcf(text, vm.defaultAccount())
                 } catch (_: Exception) { -1 }
             }
             vm.reload()
@@ -146,6 +146,11 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
 
             SectionLabel("Google contacts")
             GroupCard {
+                InfoRow(
+                    Icons.Filled.AccountCircle, "Choose accounts",
+                    "Showing: ${vm.displaySummary()} · new contacts save to ${vm.defaultAccount()?.let { it.name ?: "Phone" } ?: "Phone"}",
+                    onClick = { vm.push(Screen.Accounts) },
+                )
                 if (google.isEmpty()) {
                     InfoRow(Icons.Filled.AccountCircle, "No Google account on this phone", "Add one and turn on contacts sync; your contacts will appear here.")
                 }
