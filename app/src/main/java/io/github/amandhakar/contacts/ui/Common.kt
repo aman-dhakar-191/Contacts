@@ -22,6 +22,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -186,8 +191,47 @@ fun SwipeActionRow(
                     )
                 },
         ) {
-            content()
+            Box(Modifier.fillMaxWidth()) {
+                content()
+                // Show the actual configured action, not a generic swipe chevron.
+                if (swipeRight != SwipeAction.NONE) {
+                    SwipeActionIndicator(
+                        action = swipeRight,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+                    )
+                }
+                if (swipeLeft != SwipeAction.NONE) {
+                    SwipeActionIndicator(
+                        action = swipeLeft,
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun SwipeActionIndicator(action: SwipeAction, modifier: Modifier = Modifier) {
+    val icon = when (action) {
+        SwipeAction.CALL -> Icons.Filled.Call
+        SwipeAction.MESSAGE -> Icons.Filled.Message
+        SwipeAction.VIEW_CONTACT -> Icons.Filled.Person
+        SwipeAction.FAVORITE -> Icons.Filled.Star
+        SwipeAction.WHATSAPP -> Icons.Filled.Chat
+        SwipeAction.NONE -> return
+    }
+    Box(
+        modifier.size(30.dp).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = "Swipe for ${action.label}",
+            modifier = Modifier.size(17.dp),
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
     }
 }
 
