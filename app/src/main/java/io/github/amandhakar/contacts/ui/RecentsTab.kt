@@ -8,8 +8,9 @@ import android.provider.CallLog
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +25,6 @@ import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -142,19 +142,26 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
         CallLog.Calls.BLOCKED_TYPE -> Icons.Filled.Block
         else -> Icons.Filled.CallMissed
     }
-    Row(Modifier.fillMaxWidth().clickable(enabled = e.number.isNotBlank(), onClick = onCall).padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(name, photo, 48.dp)
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
-            Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, Modifier.padding(end = 4.dp), tint = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(e.date)) + durationText(e),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().combinedClickable(
+                onClick = { if (e.number.isNotBlank()) onCall() },
+                onLongClick = { menu = true },
+            ).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Avatar(name, photo, 48.dp)
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, null, Modifier.padding(end = 4.dp), tint = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(e.date)) + durationText(e),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
-        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             if (contactId != null) {
                 DropdownMenuItem(text = { Text("View contact") }, onClick = { menu = false; vm.push(Screen.Detail(contactId)) })
