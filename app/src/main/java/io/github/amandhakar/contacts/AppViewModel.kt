@@ -26,6 +26,7 @@ import io.github.amandhakar.contacts.data.ContactsRepo
 import io.github.amandhakar.contacts.data.GroupInfo
 import io.github.amandhakar.contacts.data.PhoneEntry
 import io.github.amandhakar.contacts.data.Prefs
+import io.github.amandhakar.contacts.data.SwipeAction
 import io.github.amandhakar.contacts.data.RecordingsRepo
 import io.github.amandhakar.contacts.util.PhoneUtil
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +68,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val blockedRepo = BlockedRepo(app)
     val recordingsRepo = RecordingsRepo(app)
     val prefs = Prefs(app)
+    var swipeLeftAction by mutableStateOf(prefs.swipeLeftAction)
+        private set
+    var swipeRightAction by mutableStateOf(prefs.swipeRightAction)
+        private set
 
     private val _contacts = MutableStateFlow<List<ContactSummary>>(emptyList())
     val contacts: StateFlow<List<ContactSummary>> = _contacts
@@ -105,6 +110,16 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             handler.removeCallbacks(reloadRunnable)
             handler.postDelayed(reloadRunnable, 400)
         }
+    }
+
+    fun setSwipeLeftAction(action: SwipeAction) {
+        prefs.swipeLeftAction = action
+        swipeLeftAction = action
+    }
+
+    fun setSwipeRightAction(action: SwipeAction) {
+        prefs.swipeRightAction = action
+        swipeRightAction = action
     }
 
     fun push(s: Screen) { stack += s }
