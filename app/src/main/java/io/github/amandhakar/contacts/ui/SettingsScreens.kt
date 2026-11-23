@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -77,6 +79,7 @@ import io.github.amandhakar.contacts.Screen
 import io.github.amandhakar.contacts.data.BlockedNumber
 import io.github.amandhakar.contacts.data.ContactSummary
 import io.github.amandhakar.contacts.data.RecordingEntry
+import io.github.amandhakar.contacts.data.SwipeAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +104,8 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
     var confirmCrash by remember { mutableStateOf(false) }
     val listCount = remember { io.github.amandhakar.contacts.data.RecordRules(ctx).entries().size }
     var speakerRec by remember { mutableStateOf(vm.prefs.speakerForRecording) }
+    var swipeLeft by remember { mutableStateOf(vm.swipeLeftAction) }
+    var swipeRight by remember { mutableStateOf(vm.swipeRightAction) }
     val google = accounts.filter { it.isGoogle }
     val local = accounts.firstOrNull { it.name == null }
     val others = accounts.filter { !it.isGoogle && it.name != null }
@@ -215,6 +220,30 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 InfoRow(Icons.Filled.Download, "Import from .vcf file", onClick = { importLauncher.launch(arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*")) })
                 InfoRow(Icons.Filled.Upload, "Export all to .vcf file", onClick = { exportLauncher.launch("contacts.vcf") })
             }
+            SectionLabel("Swipe actions")
+            GroupCard {
+                InfoRow(
+                    null, "Swipe left",
+                    "Action revealed when swiping left in Recents and Contacts",
+                    trailing = {
+                        SwipeActionPicker(swipeLeft) {
+                            swipeLeft = it
+                            vm.setSwipeLeftAction(it)
+                        }
+                    },
+                )
+                InfoRow(
+                    null, "Swipe right",
+                    "Action revealed when swiping right in Recents and Contacts",
+                    trailing = {
+                        SwipeActionPicker(swipeRight) {
+                            swipeRight = it
+                            vm.setSwipeRightAction(it)
+                        }
+                    },
+                )
+            }
+
             SectionLabel("Diagnostics")
             GroupCard {
                 InfoRow(Icons.Filled.BugReport, "Share crash reports and usage",
@@ -249,6 +278,23 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 Modifier.fillMaxWidth().padding(24.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
+        }
+    }
+}
+
+
+@Composable
+private fun SwipeActionPicker(value: SwipeAction, onChange: (SwipeAction) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }) { Text(value.label) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            SwipeAction.values().forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    onClick = { expanded = false; onChange(action) },
+                )
+            }
         }
     }
 }
