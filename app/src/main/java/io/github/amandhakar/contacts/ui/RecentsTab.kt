@@ -164,8 +164,8 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
             SwipeAction.NONE -> Unit
         }
     }
-    val leftAction = vm.prefs.swipeLeftAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
-    val rightAction = vm.prefs.swipeRightAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+    val leftAction = vm.swipeLeftAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+    val rightAction = vm.swipeRightAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
     SwipeActionRow(
         swipeLeft = leftAction,
         swipeRight = rightAction,
