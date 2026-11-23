@@ -13,6 +13,9 @@ object Engine {
 
     private const val ALL_TIME = Long.MAX_VALUE / 4
 
+    /** A pattern (maybe from an imported file) only ever sees this many characters of a number, which bounds the worst case. */
+    private const val MAX_MATCH_CHARS = 32
+
     sealed interface R {
         data object Match : R
         data class No(val why: String) : R
@@ -136,7 +139,7 @@ object Engine {
             }
             CondType.REGEX -> {
                 val re = Regex(c.param)
-                Cond(c, COST_REGEX) { v, _ -> if (v.n.isNotEmpty() && re.containsMatchIn(v.n)) R.Match else R.No("no match in ${v.n.ifEmpty { "hidden number" }}") }
+                Cond(c, COST_REGEX) { v, _ -> if (v.n.isNotEmpty() && re.containsMatchIn(v.n.take(MAX_MATCH_CHARS))) R.Match else R.No("no match in ${v.n.ifEmpty { "hidden number" }}") }
             }
             CondType.MAX_DIGITS -> {
                 val max = c.param.trim().toInt()

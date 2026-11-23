@@ -62,6 +62,10 @@ Settings → **Call identifier** puts calls into categories (Spam, Delivery, …
   the category on the call screen. It records which rule was wrong for which number and what it should have been, and can flag the number
   so it is right at once ("No category" = never label this number). Rules show how many numbers were reported wrong; the *Reported wrong*
   screen groups the reports by rule and exports them, and the processing log, as CSV.
+- **Export / import rules**: Settings → Call identifier → *Back up and share rules* saves your categories and rules (never any phone
+  numbers) to a JSON file and reads one back. An import shows what will change first: add to your rules (rules that already do the same
+  are left out) or replace them, imported rules can start switched off, and broken or unknown rules in the file are skipped and reported.
+  Rules from a file are untrusted, so a pattern only ever sees the first 32 characters of a number.
 - Where it shows: the call history, the call screen and the incoming-call notification.
 - **Processing log**: every record processed (live calls and call-history rows) with the outcome and the rules tried, kept on the
   phone only (latest 2,000). Nothing from the identifier is sent to Firebase.

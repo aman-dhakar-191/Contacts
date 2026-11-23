@@ -195,6 +195,39 @@ class Store private constructor(private val app: Context) : SQLiteOpenHelper(app
         bump()
     }
 
+    /**
+     * Applies an import plan in one transaction: creates the missing categories, optionally removes all current rules, and adds
+     * the new ones at the end of the order. With [allOff] the new rules start switched off. Returns how many rules were added.
+     */
+    fun applyImport(plan: RuleExchange.Plan, allOff: Boolean): Int {
+        val db = writableDatabase
+        var added = 0
+        db.beginTransaction()
+        try {
+            val ids = HashMap<String, Long>()
+            db.rawQuery("SELECT id, name FROM categories", null).use { c -> while (c.moveToNext()) ids[c.getString(1).lowercase()] = c.getLong(0) }
+            var nextCat = db.rawQuery("SELECT COALESCE(MAX(sort),-1)+1 FROM categories", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+            for (c in plan.newCategories) {
+                ids[c.name.lowercase()] = db.insert("categories", null, ContentValues().apply { put("name", c.name); put("color", c.color); put("sort", nextCat++) })
+            }
+            if (plan.replace) db.delete("rules", null, null)
+            var next = if (plan.replace) 0 else db.rawQuery("SELECT COALESCE(MAX(sort),-1)+1 FROM rules", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+            for (r in plan.toAdd) {
+                val cid = ids[r.category.lowercase()] ?: continue
+                db.insert("rules", null, ContentValues().apply {
+                    put("name", r.name); put("category_id", cid); put("enabled", if (r.enabled && !allOff) 1 else 0)
+                    put("sort", next++); put("conditions", ConditionCodec.encode(r.conditions))
+                })
+                added++
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        bump()
+        return added
+    }
+
     // ---------- manual flags ----------
 
     fun flags(): Map<String, Long> = readableDatabase.query("flags", arrayOf("num_key", "category_id"), null, null, null, null, null).use { c ->
