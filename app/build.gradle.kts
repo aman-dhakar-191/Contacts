@@ -88,6 +88,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-crashlytics")
+    // Firebase / Play services pull in androidx.fragment 1.1.0, which the release lint check rejects for the
+    // ActivityResult APIs used in MainActivity. Pin a current version.
+    implementation("androidx.fragment:fragment:1.8.5")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
