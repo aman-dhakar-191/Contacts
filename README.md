@@ -19,12 +19,20 @@ Package `io.github.amandhakar.contacts`, minSdk 29 (Android 10), Kotlin + Jetpac
 - **Block numbers** (system block list) and **merge duplicate contacts**.
 - **Call recording**: manual button during a call, or automatic. See the limits below.
 
-## Call recording limits
+## Call recording
 
-Android does not let normal apps capture the other person's voice on most phones. The app tries the call audio
-source first, then falls back to the microphone (and turns on the speaker so the other side is audible).
-Recordings say "your side only" when the call source was not available. Many places require everyone on the call to
-agree to being recorded.
+Android does not let normal apps capture the other person's voice on most phones: the call-audio inputs need a
+system-only permission. So the app finds out what your phone allows instead of guessing:
+
+- **Settings → Recording test** (also the *Rec test* button on the call screen). During a call, put it on speaker and run it:
+  the app records 3 seconds from every audio input, measures the level and saves a sample you can play. It tells you which
+  inputs capture sound (and whether Android is silencing the app on purpose), and lets you pick the one to use.
+- **Silence check on every recording**: loudness is read every half second. If an input is completely silent for 6 seconds
+  it is blocked, so the recorder switches to the next input; a recording that stays silent is deleted instead of kept.
+- Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
+  Microphone-type inputs record your voice, plus the other person only if the speaker is on.
+
+Many places require everyone on the call to agree to being recorded.
 
 ## Build
 
