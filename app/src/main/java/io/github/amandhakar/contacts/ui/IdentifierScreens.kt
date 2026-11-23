@@ -78,10 +78,12 @@ import io.github.amandhakar.contacts.identifier.Engine
 import io.github.amandhakar.contacts.identifier.LogFilter
 import io.github.amandhakar.contacts.identifier.LogRow
 import io.github.amandhakar.contacts.identifier.Rule
+import io.github.amandhakar.contacts.identifier.RuleExchange
 import io.github.amandhakar.contacts.identifier.Source
 import io.github.amandhakar.contacts.identifier.Store
 import io.github.amandhakar.contacts.identifier.Via
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
@@ -126,8 +128,35 @@ fun IdentifierScreen(vm: AppViewModel) {
     val catById = cats.associateBy { it.id }
     var editing by remember { mutableStateOf<Category?>(null) }
     var creating by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var imported by remember { mutableStateOf<RuleExchange.Parsed?>(null) }
 
     fun changed() { tick++; vm.reload() }
+
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            val text = RuleExchange.export(store.categories(), store.rules(), System.currentTimeMillis())
+            val ok = try { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } != null } catch (_: Exception) { false }
+            Toast.makeText(ctx, if (ok) "Exported ${store.rules().size} rules" else "Export failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                try {
+                    ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { r ->
+                        val buf = CharArray(RuleExchange.MAX_CHARS + 1)
+                        val n = r.read(buf)
+                        if (n < 0) "" else String(buf, 0, n)
+                    }
+                } catch (_: Exception) { null }
+            }
+            when (val res = if (text == null) RuleExchange.Result.Bad("That file could not be opened.") else RuleExchange.parse(text)) {
+                is RuleExchange.Result.Ok -> imported = res.parsed
+                is RuleExchange.Result.Bad -> Toast.makeText(ctx, res.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     Page("Identifier", vm) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
@@ -202,6 +231,12 @@ fun IdentifierScreen(vm: AppViewModel) {
                 }
             }
 
+            SectionLabel("Back up and share rules")
+            GroupCard {
+                InfoRow(null, "Export rules", "${rules.size} rules and ${cats.size} categories to a file. No phone numbers are included.", onClick = { exportLauncher.launch("identifier-rules.json") })
+                InfoRow(null, "Import rules", "From a file you saved or someone shared. You see what will change first.", onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) })
+            }
+
             SectionLabel("Processing")
             GroupCard {
                 InfoRow(null, "Process call history again", "Runs every rule on every call in the history again, and logs it", onClick = {
@@ -215,12 +250,69 @@ fun IdentifierScreen(vm: AppViewModel) {
         }
     }
 
+    imported?.let { parsed ->
+        ImportRulesDialog(parsed, rules, cats, onDismiss = { imported = null }) { replace, allOff ->
+            val n = store.applyImport(RuleExchange.plan(rules, cats, parsed, replace), allOff)
+            imported = null
+            Toast.makeText(ctx, "Imported $n rule${if (n == 1) "" else "s"}" + if (allOff && n > 0) ", switched off for you to review" else "", Toast.LENGTH_LONG).show()
+            changed()
+        }
+    }
     if (creating) CategoryDialog(null, onDismiss = { creating = false }) { name, color -> store.addCategory(name, color); creating = false; changed() }
     editing?.let { cat ->
         CategoryDialog(cat, onDismiss = { editing = null }, onDelete = {
             store.deleteCategory(cat.id); editing = null; changed()
         }) { name, color -> store.updateCategory(cat.id, name, color); editing = null; changed() }
     }
+}
+
+/** Shows what an import would change, and lets the user choose how, before anything is touched. */
+@Composable
+private fun ImportRulesDialog(
+    parsed: RuleExchange.Parsed, current: List<Rule>, categories: List<Category>,
+    onDismiss: () -> Unit, onImport: (replace: Boolean, allOff: Boolean) -> Unit,
+) {
+    var replace by remember { mutableStateOf(false) }
+    var allOff by remember { mutableStateOf(true) }
+    var showSkipped by remember { mutableStateOf(false) }
+    val plan = remember(replace) { RuleExchange.plan(current, categories, parsed, replace) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import rules") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("The file has ${parsed.rules.size} usable rule${if (parsed.rules.size == 1) "" else "s"}.", style = MaterialTheme.typography.bodyMedium)
+                if (current.isNotEmpty()) {
+                    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !replace, onClick = { replace = false }, label = { Text("Add to my rules") })
+                        FilterChip(selected = replace, onClick = { replace = true }, label = { Text("Replace my rules") })
+                    }
+                }
+                Text(
+                    "• ${plan.toAdd.size} rule${if (plan.toAdd.size == 1) "" else "s"} will be added" +
+                        (if (plan.duplicates > 0) "\n• ${plan.duplicates} already exist or repeat, so they are left out" else "") +
+                        (if (plan.newCategories.isNotEmpty()) "\n• ${plan.newCategories.size} new categor${if (plan.newCategories.size == 1) "y" else "ies"}: ${plan.newCategories.joinToString { it.name }}" else "") +
+                        (if (replace) "\n• your ${current.size} current rule${if (current.size == 1) "" else "s"} will be removed" else ""),
+                    Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium,
+                    color = if (replace) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+                if (parsed.skipped.isNotEmpty()) {
+                    TextButton(onClick = { showSkipped = !showSkipped }) { Text("${parsed.skipped.size} entr${if (parsed.skipped.size == 1) "y" else "ies"} skipped ${if (showSkipped) "▲" else "▼"}") }
+                    if (showSkipped) parsed.skipped.take(30).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                Row(Modifier.fillMaxWidth().clickable { allOff = !allOff }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Switch(allOff, { allOff = it })
+                    Text("Switch the imported rules off so I can review them first", Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = plan.toAdd.isNotEmpty(), onClick = { onImport(replace, allOff) }) {
+                Text(if (replace) "Replace and import" else "Import", color = if (replace) MaterialTheme.colorScheme.error else Color.Unspecified)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
