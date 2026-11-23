@@ -135,6 +135,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun refreshRole() {
         isDefaultDialer = app.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_DIALER)
+        io.github.amandhakar.contacts.util.Telemetry.fact("default_dialer", isDefaultDialer)
     }
 
     fun reload() {
@@ -209,6 +210,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Shows only this account's contacts, or everything when null. */
     fun showOnly(a: AccountInfo?) {
         prefs.hiddenAccounts = AccountInfo.hiddenFor(a?.key, allKeys())
+        io.github.amandhakar.contacts.util.Telemetry.event("account_display_choice", "choice" to (if (a == null) "all" else if (a.name == null) "phone" else "google"))
         reload()
     }
 

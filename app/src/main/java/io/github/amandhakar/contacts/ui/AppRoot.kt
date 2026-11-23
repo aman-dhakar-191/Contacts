@@ -47,6 +47,19 @@ import io.github.amandhakar.contacts.Screen
 @Composable
 fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDialer: () -> Unit) {
     BackHandler(enabled = vm.stack.isNotEmpty()) { vm.pop() }
+    val screenName = when (val t = vm.stack.lastOrNull()) {
+        null -> listOf("favorites", "recents", "contacts", "keypad")[vm.tab]
+        is Screen.Detail -> "contact"
+        is Screen.Edit -> if (t.id == null) "contact_new" else "contact_edit"
+        Screen.Settings -> "settings"
+        Screen.Blocked -> "blocked"
+        Screen.Recordings -> "recordings"
+        Screen.Merge -> "merge"
+        Screen.RecordTest -> "recording_test"
+        Screen.RecordList -> "autorecord_list"
+        Screen.Accounts -> "accounts"
+    }
+    androidx.compose.runtime.LaunchedEffect(screenName) { io.github.amandhakar.contacts.util.Telemetry.screen(screenName) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!vm.permissionsOk && !vm.skipPermissions) {
             Onboarding(requestPermissions) { vm.skipPermissions = true }

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MergeType
@@ -96,6 +97,8 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
     val accounts by vm.accounts.collectAsState()
     var autoRecord by remember { mutableStateOf(vm.prefs.autoRecord) }
     var recordUnknown by remember { mutableStateOf(vm.prefs.recordUnknown) }
+    var telemetryOn by remember { mutableStateOf(io.github.amandhakar.contacts.util.Telemetry.isEnabled()) }
+    var confirmCrash by remember { mutableStateOf(false) }
     val listCount = remember { io.github.amandhakar.contacts.data.RecordRules(ctx).entries().size }
     var speakerRec by remember { mutableStateOf(vm.prefs.speakerForRecording) }
     val google = accounts.filter { it.isGoogle }
@@ -211,6 +214,28 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 InfoRow(Icons.Filled.Block, "Blocked numbers", onClick = { vm.push(Screen.Blocked) })
                 InfoRow(Icons.Filled.Download, "Import from .vcf file", onClick = { importLauncher.launch(arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*")) })
                 InfoRow(Icons.Filled.Upload, "Export all to .vcf file", onClick = { exportLauncher.launch("contacts.vcf") })
+            }
+            SectionLabel("Diagnostics")
+            GroupCard {
+                InfoRow(Icons.Filled.BugReport, "Share crash reports and usage",
+                    "Sends crashes and anonymous usage (screens, which recording input works). Never names, numbers, accounts or call content.",
+                    onClick = { telemetryOn = !telemetryOn; io.github.amandhakar.contacts.util.Telemetry.setEnabled(telemetryOn) },
+                    trailing = { Switch(telemetryOn, { telemetryOn = it; io.github.amandhakar.contacts.util.Telemetry.setEnabled(it) }) })
+                InfoRow(Icons.Filled.Science, "Send a test report", "A harmless non-fatal report, to check it reaches Firebase", onClick = {
+                    io.github.amandhakar.contacts.util.Telemetry.nonFatal("settings_test_report", RuntimeException("Test report from Settings"))
+                    io.github.amandhakar.contacts.util.Telemetry.event("test_report")
+                    Toast.makeText(ctx, if (telemetryOn) "Test report sent" else "Turn on sharing first", Toast.LENGTH_SHORT).show()
+                })
+                InfoRow(Icons.Filled.BugReport, "Test crash", "Closes the app on purpose. The report is sent next time you open it.", onClick = { confirmCrash = true })
+            }
+            if (confirmCrash) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmCrash = false },
+                    title = { Text("Crash the app?") },
+                    text = { Text("The app will close. If it is your default phone app, an ongoing call is not affected, but open the app again afterwards.") },
+                    confirmButton = { TextButton(onClick = { confirmCrash = false; io.github.amandhakar.contacts.util.Telemetry.testCrash() }) { Text("Crash") } },
+                    dismissButton = { TextButton(onClick = { confirmCrash = false }) { Text("Cancel") } },
+                )
             }
             Text(
                 "Contacts ${io.github.amandhakar.contacts.BuildConfig.VERSION_NAME} · experimental",

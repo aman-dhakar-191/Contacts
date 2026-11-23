@@ -66,3 +66,14 @@ signed with them. Without them the workflow signs with `keystore/experimental.jk
 repo. That is fine for personal experimenting but means anyone could build an APK that Android accepts as an update.
 **Switching to your own key later changes the signature, so Android refuses the update: uninstall first**
 (contacts and call history are not lost, but app settings and recordings are).
+
+## Crash reports and usage (Firebase)
+
+The app sends crash reports (Crashlytics) and anonymous usage events (Analytics) so problems can be understood.
+Settings → Diagnostics has a switch to turn it off, a harmless test report and a test crash.
+
+- Events are things like screen names, which recording input worked, counts and error types. **Never** names, phone
+  numbers, emails, account names or call content. The advertising id and Android id are not collected.
+- `app/google-services.json` holds the Firebase project config. It is not a secret: the same values are inside every
+  APK. If it is missing, the build still works and nothing is sent.
+- Crashlytics needs the first report before the Firebase console shows anything; a crash is uploaded the next time the app opens.
