@@ -4,7 +4,7 @@ package io.github.amandhakar.contacts.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -33,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +50,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import io.github.amandhakar.contacts.call.Dialer
 import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import io.github.amandhakar.contacts.Screen
@@ -57,6 +65,7 @@ private val HIDDEN_LABELS = setOf("My Contacts", "Starred in Android")
 
 @Composable
 fun ContactsTab(vm: AppViewModel) {
+    val context = LocalContext.current
     val contacts by vm.contacts.collectAsState()
     val phones by vm.phones.collectAsState()
     val groups by vm.groups.collectAsState()
@@ -110,16 +119,50 @@ fun ContactsTab(vm: AppViewModel) {
                         )
                     }
                     items(list, key = { it.id }) { c ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable { vm.push(Screen.Detail(c.id)) }.padding(start = 16.dp, end = 36.dp, top = 8.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Avatar(c.name, c.photoUri, 48.dp)
-                            Column(Modifier.padding(start = 16.dp)) {
-                                Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                phones[c.id]?.firstOrNull()?.let {
-                                    Text(it.number, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        var menu by remember(c.id) { mutableStateOf(false) }
+                        val number = phones[c.id]?.firstOrNull()?.number
+                        Box(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth().combinedClickable(
+                                    onClick = { vm.push(Screen.Detail(c.id)) },
+                                    onLongClick = { menu = true },
+                                ).padding(start = 16.dp, end = 36.dp, top = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Avatar(c.name, c.photoUri, 48.dp)
+                                Column(Modifier.padding(start = 16.dp)) {
+                                    Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    number?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
                                 }
+                            }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("View contact") },
+                                    onClick = { menu = false; vm.push(Screen.Detail(c.id)) },
+                                )
+                                if (!number.isNullOrBlank()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Call") },
+                                        onClick = { menu = false; Dialer.call(context, number) },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Send message") },
+                                        onClick = {
+                                            menu = false
+                                            try {
+                                                context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")))
+                                            } catch (_: Exception) {
+                                                Toast.makeText(context, "Unable to open messaging app", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Edit contact") },
+                                    onClick = { menu = false; vm.push(Screen.Edit(c.id)) },
+                                )
                             }
                         }
                     }
