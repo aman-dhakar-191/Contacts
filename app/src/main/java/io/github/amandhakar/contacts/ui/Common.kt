@@ -11,7 +11,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
@@ -139,12 +140,14 @@ fun SwipeActionRow(
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
     var settledOffset by remember { mutableFloatStateOf(0f) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
     val animatedOffset by animateFloatAsState(settledOffset, label = "swipe row offset")
+    val latestAnimatedOffset by rememberUpdatedState(animatedOffset)
     val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
 
     Box(Modifier.fillMaxWidth()) {
-        Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
                 SwipeActionSlot(swipeRight.label, { settledOffset = 0f; dragOffset = 0f; onSwipeRight() }, Modifier.width(revealWidth))
             }
@@ -155,23 +158,24 @@ fun SwipeActionRow(
         }
         Box(
             Modifier.fillMaxWidth()
-                .offset { IntOffset((animatedOffset + dragOffset).roundToInt(), 0) }
+                .offset { IntOffset((if (dragging) dragOffset else animatedOffset).roundToInt(), 0) }
                 .pointerInput(swipeLeft, swipeRight, revealPx) {
                     detectHorizontalDragGestures(
-                        onDragStart = { dragOffset = 0f },
+                        onDragStart = {
+                            dragging = true
+                            dragOffset = latestAnimatedOffset
+                        },
                         onHorizontalDrag = { change, amount ->
                             change.consume()
-                            dragOffset = (animatedOffset + dragOffset + amount - animatedOffset)
-                                .coerceIn(minOffset - animatedOffset, maxOffset - animatedOffset)
+                            dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
                         },
                         onDragEnd = {
-                            val target = (animatedOffset + dragOffset).coerceIn(minOffset, maxOffset)
-                            settledOffset = if (abs(target) >= revealPx * 0.42f) {
-                                if (target > 0f) revealPx else -revealPx
+                            settledOffset = if (abs(dragOffset) >= revealPx * 0.42f) {
+                                if (dragOffset > 0f) revealPx else -revealPx
                             } else 0f
-                            dragOffset = 0f
+                            dragging = false
                         },
-                        onDragCancel = { dragOffset = 0f; settledOffset = 0f },
+                        onDragCancel = { dragging = false; dragOffset = 0f; settledOffset = 0f },
                     )
                 },
         ) {
