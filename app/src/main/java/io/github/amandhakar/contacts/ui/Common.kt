@@ -191,19 +191,27 @@ fun SwipeActionRow(
                     )
                 },
         ) {
+            // Reserve dedicated gutters so action indicators never cover avatars,
+            // text, or the Contacts alphabet index.
             Box(Modifier.fillMaxWidth()) {
-                content()
-                // Show the actual configured action, not a generic swipe chevron.
+                Box(
+                    Modifier.fillMaxWidth().padding(
+                        start = if (swipeRight != SwipeAction.NONE) 42.dp else 0.dp,
+                        end = if (swipeLeft != SwipeAction.NONE) 48.dp else 0.dp,
+                    )
+                ) {
+                    content()
+                }
                 if (swipeRight != SwipeAction.NONE) {
                     SwipeActionIndicator(
                         action = swipeRight,
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 5.dp),
                     )
                 }
                 if (swipeLeft != SwipeAction.NONE) {
                     SwipeActionIndicator(
                         action = swipeLeft,
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 34.dp),
                     )
                 }
             }
