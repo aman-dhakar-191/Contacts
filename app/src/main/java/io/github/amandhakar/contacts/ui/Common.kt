@@ -186,7 +186,28 @@ fun SwipeActionRow(
                     )
                 },
         ) {
-            content()
+            Box(Modifier.fillMaxWidth()) {
+                content()
+                // Subtle edge chevrons make the configured swipe directions discoverable.
+                if (swipeRight != SwipeAction.NONE) {
+                    Text(
+                        "›",
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 3.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        fontSize = 22.sp,
+                        lineHeight = 22.sp,
+                    )
+                }
+                if (swipeLeft != SwipeAction.NONE) {
+                    Text(
+                        "‹",
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 3.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        fontSize = 22.sp,
+                        lineHeight = 22.sp,
+                    )
+                }
+            }
         }
     }
 }
