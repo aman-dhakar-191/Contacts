@@ -32,6 +32,17 @@ system-only permission. So the app finds out what your phone allows instead of g
 - Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
   Microphone-type inputs record your voice, plus the other person only if the speaker is on.
 
+### Recording rules
+
+Settings → Call recording decides which calls are recorded by themselves (as soon as they connect):
+
+- **Record all calls**
+- **Record unknown numbers**: any number that isn't in your contacts, and hidden numbers
+- **Auto-record list**: numbers you add by hand or pick from contacts; also *Always record this number* on a contact's
+  number and *Always record* in the call history menu
+
+The call screen says why a recording started ("auto: unknown number"). Stopping it by hand sticks for the rest of that call.
+
 Many places require everyone on the call to agree to being recorded.
 
 ## Build

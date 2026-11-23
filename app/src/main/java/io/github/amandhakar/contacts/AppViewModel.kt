@@ -42,6 +42,7 @@ sealed interface Screen {
     data object Recordings : Screen
     data object Merge : Screen
     data object RecordTest : Screen
+    data object RecordList : Screen
 }
 
 val REQUIRED_PERMISSIONS = arrayOf(

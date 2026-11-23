@@ -9,6 +9,16 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("auto_record", false)
         set(v) = sp.edit().putBoolean("auto_record", v).apply()
 
+    /** Also record every call from a number that is not in the contacts (and hidden numbers). */
+    var recordUnknown: Boolean
+        get() = sp.getBoolean("record_unknown", false)
+        set(v) = sp.edit().putBoolean("record_unknown", v).apply()
+
+    /** Numbers that are always recorded, one per line: key|number|label. See RecordRules. */
+    var recordList: String
+        get() = sp.getString("record_list", "") ?: ""
+        set(v) = sp.edit().putString("record_list", v).apply()
+
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
     var speakerForRecording: Boolean
         get() = sp.getBoolean("speaker_for_recording", true)

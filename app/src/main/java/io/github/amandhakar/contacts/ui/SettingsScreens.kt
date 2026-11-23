@@ -95,6 +95,8 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
     val scope = rememberCoroutineScope()
     val accounts by vm.accounts.collectAsState()
     var autoRecord by remember { mutableStateOf(vm.prefs.autoRecord) }
+    var recordUnknown by remember { mutableStateOf(vm.prefs.recordUnknown) }
+    val listCount = remember { io.github.amandhakar.contacts.data.RecordRules(ctx).entries().size }
     var speakerRec by remember { mutableStateOf(vm.prefs.speakerForRecording) }
     val google = accounts.filter { it.isGoogle }
     val local = accounts.firstOrNull { it.name == null }
@@ -180,6 +182,11 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 InfoRow(Icons.Filled.Mic, "Record all calls", "Start recording as soon as a call connects",
                     onClick = { autoRecord = !autoRecord; vm.prefs.autoRecord = autoRecord },
                     trailing = { Switch(autoRecord, { autoRecord = it; vm.prefs.autoRecord = it }) })
+                InfoRow(Icons.Filled.Mic, "Record unknown numbers", "Calls from numbers not in your contacts, and hidden numbers",
+                    onClick = { recordUnknown = !recordUnknown; vm.prefs.recordUnknown = recordUnknown },
+                    trailing = { Switch(recordUnknown, { recordUnknown = it; vm.prefs.recordUnknown = it }) })
+                InfoRow(Icons.Filled.PersonAdd, "Auto-record list", if (listCount == 0) "Numbers and contacts that are always recorded" else if (listCount == 1) "1 number is always recorded" else "$listCount numbers are always recorded",
+                    onClick = { vm.push(Screen.RecordList) })
                 InfoRow(Icons.Filled.VolumeUp, "Speaker fallback", "Use the speaker when only the microphone can be recorded",
                     onClick = { speakerRec = !speakerRec; vm.prefs.speakerForRecording = speakerRec },
                     trailing = { Switch(speakerRec, { speakerRec = it; vm.prefs.speakerForRecording = it }) })

@@ -6,7 +6,7 @@ import android.telecom.CallAudioState
 import android.telecom.DisconnectCause
 import android.telecom.InCallService
 import io.github.amandhakar.contacts.data.ContactsRepo
-import io.github.amandhakar.contacts.data.Prefs
+import io.github.amandhakar.contacts.data.RecordRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +18,7 @@ class CallService : InCallService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val callbacks = HashMap<Call, Call.Callback>()
     private val answered = HashSet<Call>()
+    private val autoDecided = HashSet<Call>()
 
     override fun onCreate() {
         super.onCreate()
@@ -54,6 +55,7 @@ class CallService : InCallService() {
         val info = CallHub.calls.value.firstOrNull { it.call == call }
         callbacks.remove(call)?.let { call.unregisterCallback(it) }
         val wasAnswered = answered.remove(call)
+        autoDecided.remove(call)
         CallHub.remove(call)
         Notifications.cancelIncoming(this)
 
@@ -76,8 +78,16 @@ class CallService : InCallService() {
         if (info.state == Call.STATE_ACTIVE) {
             answered += call
             Notifications.ongoing(this, info)
-            if (Prefs(this).autoRecord && !RecorderState.active.value) {
-                RecorderService.start(this, info.number, info.incoming)
+            // Decide once per call, so stopping a recording by hand isn't undone when the call comes off hold.
+            if (autoDecided.add(call) && !RecorderState.active.value) {
+                scope.launch {
+                    val known = ContactsRepo(applicationContext).lookup(info.number) != null
+                    val reason = RecordRules(applicationContext).reason(info.number, known)
+                    if (reason != null && !RecorderState.active.value) {
+                        RecorderState.reason.value = reason.label
+                        RecorderService.start(applicationContext, info.number, info.incoming)
+                    }
+                }
             }
         }
     }
