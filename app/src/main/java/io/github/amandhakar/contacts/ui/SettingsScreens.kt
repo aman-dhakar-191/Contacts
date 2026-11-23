@@ -104,8 +104,8 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
     var confirmCrash by remember { mutableStateOf(false) }
     val listCount = remember { io.github.amandhakar.contacts.data.RecordRules(ctx).entries().size }
     var speakerRec by remember { mutableStateOf(vm.prefs.speakerForRecording) }
-    var swipeLeft by remember { mutableStateOf(vm.prefs.swipeLeftAction) }
-    var swipeRight by remember { mutableStateOf(vm.prefs.swipeRightAction) }
+    var swipeLeft by remember { mutableStateOf(vm.swipeLeftAction) }
+    var swipeRight by remember { mutableStateOf(vm.swipeRightAction) }
     val google = accounts.filter { it.isGoogle }
     val local = accounts.firstOrNull { it.name == null }
     val others = accounts.filter { !it.isGoogle && it.name != null }
@@ -228,7 +228,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     trailing = {
                         SwipeActionPicker(swipeLeft) {
                             swipeLeft = it
-                            vm.prefs.swipeLeftAction = it
+                            vm.setSwipeLeftAction(it)
                         }
                     },
                 )
@@ -238,7 +238,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     trailing = {
                         SwipeActionPicker(swipeRight) {
                             swipeRight = it
-                            vm.prefs.swipeRightAction = it
+                            vm.setSwipeRightAction(it)
                         }
                     },
                 )
