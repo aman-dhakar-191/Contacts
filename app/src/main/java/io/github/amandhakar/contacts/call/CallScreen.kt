@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -62,6 +64,9 @@ fun CallScreen(onClose: () -> Unit) {
     val recording by RecorderState.active.collectAsState()
     val bothSides by RecorderState.bothSides.collectAsState()
     val recError by RecorderState.error.collectAsState()
+    val recWarning by RecorderState.warning.collectAsState()
+    val recLabel by RecorderState.sourceLabel.collectAsState()
+    var showTest by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     var last by remember { mutableStateOf<CallInfo?>(null) }
@@ -79,6 +84,9 @@ fun CallScreen(onClose: () -> Unit) {
     LaunchedEffect(calls.isEmpty()) {
         if (calls.isEmpty()) { delay(if (last == null) 100 else 1200); onClose() }
     }
+    LaunchedEffect(recWarning) {
+        recWarning?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); RecorderState.warning.value = null }
+    }
     LaunchedEffect(recError) {
         recError?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); RecorderState.error.value = null }
     }
@@ -86,6 +94,9 @@ fun CallScreen(onClose: () -> Unit) {
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg).safeDrawingPadding()) {
         if (shown == null) return@Box
+        androidx.compose.material3.TextButton(onClick = { showTest = true }, modifier = Modifier.align(Alignment.TopEnd)) {
+            Text("Rec test", color = Color(0xFFB0B8C0))
+        }
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(40.dp))
             Avatar(shown.name ?: shown.number, shown.photoUri, 112.dp)
@@ -99,7 +110,7 @@ fun CallScreen(onClose: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.FiberManualRecord, null, tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text(if (bothSides) "Recording" else "Recording (your side + speaker)", color = Color(0xFFFF8A80), fontSize = 14.sp)
+                    Text(if (bothSides) "Recording · $recLabel" else "Recording · $recLabel (your side + speaker)", color = Color(0xFFFF8A80), fontSize = 14.sp)
                 }
             }
             if (other != null && primary != null) {
@@ -146,6 +157,19 @@ fun CallScreen(onClose: () -> Unit) {
                 Spacer(Modifier.height(100.dp))
             }
         }
+    }
+
+    if (showTest) {
+        AlertDialog(
+            onDismissRequest = { showTest = false },
+            confirmButton = { TextButton(onClick = { showTest = false }) { Text("Close") } },
+            title = { Text("Recording test") },
+            text = {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
+                    io.github.amandhakar.contacts.ui.ProbeControls(hasCall = calls.isNotEmpty())
+                }
+            },
+        )
     }
 
     if (showKeypad && primary != null) {

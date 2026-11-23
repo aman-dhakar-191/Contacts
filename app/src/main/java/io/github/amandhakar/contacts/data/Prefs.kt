@@ -14,6 +14,16 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("speaker_for_recording", true)
         set(v) = sp.edit().putBoolean("speaker_for_recording", v).apply()
 
+    /** A [RecSource] enum name, or "auto". Set from the recording test. */
+    var preferredSource: String
+        get() = sp.getString("preferred_source", "auto") ?: "auto"
+        set(v) = sp.edit().putString("preferred_source", v).apply()
+
+    /** JSON of the last recording test, see RecordingProbe. */
+    var lastProbe: String?
+        get() = sp.getString("last_probe", null)
+        set(v) = sp.edit().putString("last_probe", v).apply()
+
     fun speedDial(slot: Int): Pair<String, String>? {
         val v = sp.getString("sd_$slot", null) ?: return null
         val i = v.indexOf('|')

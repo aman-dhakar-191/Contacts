@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
@@ -82,7 +83,7 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-private fun Page(title: String, vm: AppViewModel, content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit) {
+internal fun Page(title: String, vm: AppViewModel, content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         TopAppBar(title = { Text(title) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), navigationIcon = { IconButton(onClick = { vm.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
     }) { content(it) }
@@ -183,6 +184,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     onClick = { speakerRec = !speakerRec; vm.prefs.speakerForRecording = speakerRec },
                     trailing = { Switch(speakerRec, { speakerRec = it; vm.prefs.speakerForRecording = it }) })
                 InfoRow(Icons.Filled.LibraryMusic, "Recordings", onClick = { vm.push(Screen.Recordings) })
+                InfoRow(Icons.Filled.Science, "Recording test", "Find out which inputs this phone lets the app record, and whether the other side is captured", onClick = { vm.push(Screen.RecordTest) })
             }
             Text(
                 "Most phones don't let apps capture the other person's voice directly, so a recording may only hold your side " +

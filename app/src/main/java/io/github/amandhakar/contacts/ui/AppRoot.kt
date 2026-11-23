@@ -60,6 +60,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
             Screen.Blocked -> BlockedScreen(vm)
             Screen.Recordings -> RecordingsScreen(vm)
             Screen.Merge -> MergeScreen(vm)
+            Screen.RecordTest -> RecordingTestScreen(vm)
         }
     }
 }
