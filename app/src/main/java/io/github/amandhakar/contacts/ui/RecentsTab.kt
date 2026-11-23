@@ -166,6 +166,13 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                     menu = false
                     try { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${e.number}"))) } catch (_: Exception) {}
                 })
+                val rules = io.github.amandhakar.contacts.data.RecordRules(ctx)
+                val always = rules.contains(e.number)
+                DropdownMenuItem(text = { Text(if (always) "Stop auto-recording" else "Always record") }, onClick = {
+                    menu = false
+                    if (always) rules.remove(e.number) else rules.add(e.number, name.takeIf { it != e.number })
+                    Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
+                })
                 DropdownMenuItem(text = { Text("Block number") }, onClick = {
                     menu = false
                     val ok = vm.blockedRepo.block(e.number)

@@ -133,6 +133,16 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                                 IconButton(onClick = { sms(p.number) }) { Icon(Icons.AutoMirrored.Filled.Message, "Message") }
                                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    val rules = io.github.amandhakar.contacts.data.RecordRules(ctx)
+                                    val always = rules.contains(p.number)
+                                    DropdownMenuItem(
+                                        text = { Text(if (always) "Stop auto-recording this number" else "Always record this number") },
+                                        onClick = {
+                                            menu = false
+                                            if (always) rules.remove(p.number) else rules.add(p.number, d.name)
+                                            Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
+                                        },
+                                    )
                                     DropdownMenuItem(text = { Text("WhatsApp") }, onClick = {
                                         menu = false
                                         try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${PhoneUtil.digits(p.number)}"))) } catch (_: Exception) {}

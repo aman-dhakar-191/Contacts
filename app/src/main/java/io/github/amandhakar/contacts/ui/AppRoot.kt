@@ -61,6 +61,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
             Screen.Recordings -> RecordingsScreen(vm)
             Screen.Merge -> MergeScreen(vm)
             Screen.RecordTest -> RecordingTestScreen(vm)
+            Screen.RecordList -> RecordListScreen(vm)
         }
     }
 }

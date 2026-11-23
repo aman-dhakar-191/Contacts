@@ -66,6 +66,7 @@ fun CallScreen(onClose: () -> Unit) {
     val recError by RecorderState.error.collectAsState()
     val recWarning by RecorderState.warning.collectAsState()
     val recLabel by RecorderState.sourceLabel.collectAsState()
+    val recReason by RecorderState.reason.collectAsState()
     var showTest by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -110,7 +111,11 @@ fun CallScreen(onClose: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.FiberManualRecord, null, tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text(if (bothSides) "Recording · $recLabel" else "Recording · $recLabel (your side + speaker)", color = Color(0xFFFF8A80), fontSize = 14.sp)
+                    Text(
+                        (if (bothSides) "Recording · $recLabel" else "Recording · $recLabel (your side + speaker)") +
+                            (recReason?.let { " · auto: $it" } ?: ""),
+                        color = Color(0xFFFF8A80), fontSize = 14.sp,
+                    )
                 }
             }
             if (other != null && primary != null) {
@@ -140,7 +145,7 @@ fun CallScreen(onClose: () -> Unit) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ToggleButton(Icons.Filled.Pause, "Hold", held) { if (held) CallHub.unhold(primary.call) else CallHub.hold(primary.call) }
                     ToggleButton(Icons.Filled.FiberManualRecord, "Record", recording) {
-                        if (recording) RecorderService.stop(ctx) else RecorderService.start(ctx, primary.number, primary.incoming)
+                        if (recording) RecorderService.stop(ctx) else { RecorderState.reason.value = null; RecorderService.start(ctx, primary.number, primary.incoming) }
                     }
                     if (other != null) {
                         ToggleButton(Icons.Filled.SwapCalls, "Swap", false) {

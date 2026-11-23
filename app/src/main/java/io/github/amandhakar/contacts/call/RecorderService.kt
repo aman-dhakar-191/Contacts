@@ -23,6 +23,8 @@ object RecorderState {
     val bothSides = MutableStateFlow(false)
     /** Label of the input in use, e.g. "Microphone". */
     val sourceLabel = MutableStateFlow("")
+    /** Why recording started by itself ("unknown number", "auto-record list", "all calls"), or null when started by hand. */
+    val reason = MutableStateFlow<String?>(null)
     val error = MutableStateFlow<String?>(null)
     /** Shown once as a message, e.g. when a silent input was swapped for the next one. */
     val warning = MutableStateFlow<String?>(null)
@@ -161,6 +163,7 @@ class RecorderService : Service() {
         }
         file = null; current = null
         RecorderState.active.value = false
+        RecorderState.reason.value = null
     }
 
     companion object {
