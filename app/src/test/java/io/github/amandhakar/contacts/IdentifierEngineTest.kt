@@ -1,6 +1,11 @@
 package io.github.amandhakar.contacts
 
+import io.github.amandhakar.contacts.identifier.ActionStats
 import io.github.amandhakar.contacts.identifier.CallRecord
+import io.github.amandhakar.contacts.identifier.Correction
+import io.github.amandhakar.contacts.identifier.Export
+import io.github.amandhakar.contacts.identifier.LogRow
+import io.github.amandhakar.contacts.identifier.TraceEntry
 import io.github.amandhakar.contacts.identifier.Category
 import io.github.amandhakar.contacts.identifier.CondType
 import io.github.amandhakar.contacts.identifier.Condition
@@ -27,12 +32,12 @@ class IdentifierEngineTest {
         val known: Set<String> = emptySet(),
         val labels: Map<String, Set<String>> = emptyMap(),
         val names: Map<String, String> = emptyMap(),
-        val calls: Int = 0,
+        val st: ActionStats = ActionStats(),
     ) : Env {
         override fun isKnown(number: String) = number in known
         override fun labelsOf(number: String) = labels[number].orEmpty()
         override fun contactName(number: String) = names[number]
-        override fun callsFrom(number: String, untilMs: Long, windowMs: Long) = calls
+        override fun stats(number: String, untilMs: Long, windowMs: Long) = st
     }
 
     private fun at(h: Int, m: Int = 0): Long = Calendar.getInstance().apply { set(2026, Calendar.JANUARY, 15, h, m, 0) }.timeInMillis
@@ -113,9 +118,9 @@ class IdentifierEngineTest {
 
     @Test fun repeatCallerCountsTheLiveCallToo() {
         val r = rule(1, "repeat", spam, Condition(CondType.REPEAT, "3/24"))
-        assertEquals(spam, run(rec("5551234", source = Source.HISTORY), listOf(r), env = FakeEnv(calls = 3)).category)
-        assertNull(run(rec("5551234", source = Source.HISTORY), listOf(r), env = FakeEnv(calls = 2)).category)
-        assertEquals(spam, run(rec("5551234", source = Source.LIVE), listOf(r), env = FakeEnv(calls = 2)).category) // 2 earlier + this one
+        assertEquals(spam, run(rec("5551234", source = Source.HISTORY), listOf(r), env = FakeEnv(st = ActionStats(answered = 2, missed = 1))).category)
+        assertNull(run(rec("5551234", source = Source.HISTORY), listOf(r), env = FakeEnv(st = ActionStats(answered = 2))).category)
+        assertEquals(spam, run(rec("5551234", source = Source.LIVE), listOf(r), env = FakeEnv(st = ActionStats(answered = 2))).category) // 2 earlier + this one
     }
 
     @Test fun regexAndBrokenRules() {
@@ -148,5 +153,86 @@ class IdentifierEngineTest {
         assertEquals(CondType.HIDDEN, back[1].type)
         assertEquals("a b c", back[2].param) // tabs and newlines can't break the format
         assertTrue(back[0].describe().contains("140"))
+    }
+
+    // ---- what you did with a number's calls ----
+
+    @Test fun declinedAnsweredMissedAndCalledBack() {
+        val env = FakeEnv(st = ActionStats(answered = 1, outgoing = 2, missed = 4, declined = 1, blocked = 1))
+        fun hit(type: CondType, p: String) = run(rec("5551234"), listOf(rule(1, "x", spam, Condition(type, p))), env = env).category
+        assertEquals(spam, hit(CondType.DECLINED, "2"))       // declined + blocked = 2
+        assertNull(hit(CondType.DECLINED, "3"))
+        assertEquals(spam, hit(CondType.MISSED, "4/7"))
+        assertNull(hit(CondType.MISSED, "5"))
+        assertEquals(spam, hit(CondType.ANSWERED, "1"))
+        assertEquals(spam, hit(CondType.CALLED_BY_ME, "2"))
+        assertNull(hit(CondType.CALLED_BY_ME, "3"))
+    }
+
+    @Test fun acceptanceRateNeedsEnoughCalls() {
+        // 1 answered, 4 missed, 1 declined, 1 blocked: 7 rang you, answered 14%
+        val env = FakeEnv(st = ActionStats(answered = 1, missed = 4, declined = 1, blocked = 1))
+        fun hit(type: CondType, p: String) = run(rec("5551234"), listOf(rule(1, "x", spam, Condition(type, p))), env = env)
+        assertEquals(spam, hit(CondType.ACCEPT_RATE_BELOW, "20/5").category)
+        assertNull(hit(CondType.ACCEPT_RATE_BELOW, "10/5").category)               // 14% is not below 10
+        assertNull(hit(CondType.ACCEPT_RATE_BELOW, "20/10").category)              // only 7 calls, needs 10
+        assertTrue(hit(CondType.ACCEPT_RATE_BELOW, "20/10").trace.single().result.contains("need 10"))
+        assertEquals(spam, hit(CondType.ACCEPT_RATE_ABOVE, "10/5").category)
+        assertNull(hit(CondType.ACCEPT_RATE_ABOVE, "50/5").category)
+    }
+
+    @Test fun actionConditionsIgnoreHiddenNumbers() {
+        val env = FakeEnv(st = ActionStats(declined = 9))
+        assertNull(run(rec(""), listOf(rule(1, "x", spam, Condition(CondType.DECLINED, "1"))), env = env).category)
+    }
+
+    @Test fun parsingCountsAndRates() {
+        assertEquals(3 to 0, Engine.parseCountWindow("3"))
+        assertEquals(3 to 30, Engine.parseCountWindow("3/30"))
+        assertNull(Engine.parseCountWindow("0"))
+        assertNull(Engine.parseCountWindow("a/b"))
+        assertEquals(Triple(20, 5, 0), Engine.parseRate("20/5"))
+        assertEquals(Triple(20, 5, 30), Engine.parseRate("20/5/30"))
+        assertNull(Engine.parseRate("120/5"))
+        assertNull(Engine.parseRate("20"))
+        assertNotNull(Engine.validate(rule(1, "bad", spam, Condition(CondType.ACCEPT_RATE_BELOW, "x"))))
+    }
+
+    // ---- "never categorise" flag ----
+
+    @Test fun exemptFlagStopsEveryRule() {
+        val r = rule(1, "all", spam, Condition(CondType.UNKNOWN))
+        val o = run(rec("9876543210"), listOf(r), flags = mapOf("9876543210" to Engine.EXEMPT))
+        assertEquals(Via.MANUAL, o.via)
+        assertNull(o.category)
+    }
+
+    // ---- export ----
+
+    @Test fun csvEscapingAndFormulaGuard() {
+        assertEquals("a,\"b,c\",\"say \"\"hi\"\"\"", Export.csvRow(listOf("a", "b,c", "say \"hi\"")))
+        assertEquals("'=SUM(A1)", Export.csvRow(listOf("=SUM(A1)")))
+        assertEquals("one two,", Export.csvRow(listOf("one\ntwo", null)))
+    }
+
+    @Test fun exportsHaveHeadersAndRows() {
+        val c = Correction(1, 0, "+91 98765 43210", "Asha", "Spam", Via.RULE, 7, "Telemarketing prefix", null, "a friend, new SIM")
+        val text = Export.corrections(listOf(c))
+        val lines = text.trim().lines()
+        assertEquals(2, lines.size)
+        assertTrue(lines[0].startsWith("reported_at,number,name,was_category"))
+        assertTrue(lines[1].contains("Telemarketing prefix"))
+        assertTrue(lines[1].contains("(none)"))                  // should be: no category
+        assertTrue(lines[1].contains("\"a friend, new SIM\""))  // comma kept inside quotes
+        val row = LogRow(1, 0, Source.LIVE, "5551234", null, "IN", 0, null, Via.NONE, null, null, 3, listOf(TraceEntry("r", "off")), null)
+        assertTrue(Export.log(listOf(row)).trim().lines()[1].contains("r: off"))
+    }
+
+    @Test fun flagsApplyWhenThereAreNoRules() {
+        // the master switch hands the engine an empty rule list; a flag must still decide
+        val o = run(rec("9876543210"), emptyList(), flags = mapOf("9876543210" to spam.id))
+        assertEquals(Via.MANUAL, o.via)
+        assertEquals(spam, o.category)
+        assertNull(run(rec("9876543210"), emptyList()).category)
     }
 }

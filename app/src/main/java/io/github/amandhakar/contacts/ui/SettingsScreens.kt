@@ -251,7 +251,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 val idRules = remember { idStore.rules() }
                 InfoRow(
                     Icons.Filled.Shield, "Call identifier",
-                    if (vm.prefs.identifierOn) "On · ${idRules.count { it.enabled }} of ${idRules.size} rules on" else "Off · categorise calls by rules or manual flags",
+                    if (vm.prefs.identifierOn) "On · ${idRules.count { it.enabled }} of ${idRules.size} rules on" else "Rules off · flagged numbers are still shown",
                     onClick = { vm.push(Screen.Identifier) },
                 )
             }

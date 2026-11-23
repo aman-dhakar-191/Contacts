@@ -8,10 +8,13 @@ import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.util.PhoneUtil
 
 /** What the UI shows for a categorised call. */
-data class Tag(val name: String, val color: Int, val via: Via, val ruleName: String?)
+data class Tag(val name: String, val color: Int, val via: Via, val ruleName: String?, val ruleId: Long? = null)
 
 /** Runs the engine for live calls and for the call log, and writes the processing log. */
 object Identifier {
+    /** How many call-log rows the frequency and acceptance conditions can look back over. */
+    const val STATS_ROWS = 2000
+
     fun isOn(ctx: Context) = Prefs(ctx).identifierOn
 
     fun directionOf(logType: Int): Direction = when (logType) {
@@ -24,7 +27,9 @@ object Identifier {
     }
 
     /** Looks things up in the phone's contacts. Cached per number for the length of one run. */
-    class AppEnv(ctx: Context, private val history: List<CallEntry>) : Env {
+    class AppEnv(ctx: Context, loadHistory: () -> List<CallEntry>) : Env {
+        // Only read the call log if a rule actually asks what you did with the number before.
+        private val history by lazy(loadHistory)
         private val repo = ContactsRepo(ctx)
         private val who = HashMap<String, Pair<Long, String>?>()
         private val groupTitles by lazy { repo.groups().associate { it.id to it.title } }
@@ -42,27 +47,41 @@ object Identifier {
             return labels.getOrPut(id) { repo.detail(id)?.groupIds?.mapNotNull { groupTitles[it] }?.toSet() ?: emptySet() }
         }
 
-        override fun callsFrom(number: String, untilMs: Long, windowMs: Long): Int {
+        override fun stats(number: String, untilMs: Long, windowMs: Long): ActionStats {
             val key = PhoneUtil.key(number)
-            if (key.isEmpty()) return 0
-            return history.count { PhoneUtil.key(it.number) == key && it.date <= untilMs && it.date > untilMs - windowMs }
+            if (key.isEmpty()) return ActionStats()
+            var answered = 0; var outgoing = 0; var missed = 0; var declined = 0; var blocked = 0
+            for (e in history) {
+                if (e.date > untilMs || e.date <= untilMs - windowMs || PhoneUtil.key(e.number) != key) continue
+                when (e.type) {
+                    CallLog.Calls.INCOMING_TYPE -> answered++
+                    CallLog.Calls.OUTGOING_TYPE -> outgoing++
+                    CallLog.Calls.MISSED_TYPE -> missed++
+                    CallLog.Calls.REJECTED_TYPE -> declined++
+                    CallLog.Calls.BLOCKED_TYPE -> blocked++
+                }
+            }
+            return ActionStats(answered, outgoing, missed, declined, blocked)
         }
     }
 
-    private fun tagOf(o: Outcome): Tag? = o.category?.let { Tag(it.name, it.color, o.via, o.rule?.name) }
+    private fun tagOf(o: Outcome): Tag? = o.category?.let { Tag(it.name, it.color, o.via, o.rule?.name, o.rule?.id) }
 
     /** Classifies a ringing or placed call and logs it. Returns null when the master switch is off. */
     fun classifyLive(ctx: Context, number: String, nameHint: String?, incoming: Boolean): Tag? {
-        if (!isOn(ctx)) return null
+        val on = isOn(ctx)
         val store = Store.get(ctx)
+        val flags = store.flags()
+        // The master switch is for the rules. A number you flagged yourself is always shown.
+        if (!on && PhoneUtil.key(number) !in flags) return null
         val t0 = System.nanoTime()
         val now = System.currentTimeMillis()
         val rec = CallRecord(Source.LIVE, number, nameHint, if (incoming) Direction.IN else Direction.OUT, now, null, null)
         var outcome: Outcome? = null
         var failure: String? = null
         try {
-            val env = AppEnv(ctx, io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(500))
-            outcome = Engine.classify(rec, store.rules(), store.categories().associateBy { it.id }, store.flags(), env)
+            val env = AppEnv(ctx) { io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS) }
+            outcome = Engine.classify(rec, if (on) store.rules() else emptyList(), store.categories().associateBy { it.id }, flags, env)
         } catch (e: Exception) {
             failure = "${e.javaClass.simpleName}: ${e.message}"
         }
@@ -82,27 +101,31 @@ object Identifier {
      * categorised row. A row is only processed again after the rules, categories or flags changed.
      */
     fun processHistory(ctx: Context, history: List<CallEntry>): Map<Long, Tag> {
-        if (!isOn(ctx) || history.isEmpty()) return emptyMap()
+        val on = isOn(ctx)
         val store = Store.get(ctx)
+        val flags = store.flags()
+        // Rules off: only the numbers you flagged yourself are looked at (and logged).
+        if (history.isEmpty() || (!on && flags.isEmpty())) return emptyMap()
+        val rows = if (on) history else history.filter { PhoneUtil.key(it.number) in flags }
         val prefs = Prefs(ctx)
         val version = prefs.identifierVersion
-        val rules = store.rules()
+        val rules = if (on) store.rules() else emptyList()
         val categories = store.categories().associateBy { it.id }
-        val flags = store.flags()
         val cached = store.results(version)
         val ruleById = rules.associateBy { it.id }
         val out = HashMap<Long, Tag>()
-        val env = AppEnv(ctx, history)
+        // Frequency / acceptance rules look at more history than the list on screen shows.
+        val env = AppEnv(ctx) { io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS) }
         val broken = LinkedHashMap<Long, String>()
 
         fun fromCache(r: StoredResult): Tag? {
             val cat = r.categoryId?.let { categories[it] } ?: return null
-            return Tag(cat.name, cat.color, r.via, r.ruleId?.let { ruleById[it]?.name })
+            return Tag(cat.name, cat.color, r.via, r.ruleId?.let { ruleById[it]?.name }, r.ruleId)
         }
 
         try {
             store.batch { w ->
-                for (e in history) {
+                for (e in rows) {
                     val hit = cached[e.id]
                     if (hit != null) { fromCache(hit)?.let { out[e.id] = it }; continue }
                     val t0 = System.nanoTime()

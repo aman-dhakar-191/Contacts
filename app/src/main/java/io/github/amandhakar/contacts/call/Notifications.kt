@@ -61,7 +61,9 @@ object Notifications {
 
     fun incoming(ctx: Context, info: CallInfo) {
         if (!canPost(ctx)) return
-        val label = info.name ?: info.number.ifBlank { "Unknown" }
+        val who = info.name ?: info.number.ifBlank { "Unknown" }
+        // The category goes in the headline (the part of a call popup that is always shown), not only the small text.
+        val label = info.tag?.let { "${it.name} · $who" } ?: who
         val decline = PendingIntent.getBroadcast(
             ctx, 12, Intent(ctx, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_DECLINE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -89,6 +91,7 @@ object Notifications {
     fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
+        val tagged = info.tag?.let { "${it.name} · $label" } ?: label
         val status = when (info.state) {
             android.telecom.Call.STATE_HOLDING -> "On hold"
             android.telecom.Call.STATE_ACTIVE -> "Ongoing call"
@@ -97,8 +100,8 @@ object Notifications {
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle(label)
-            .setContentText(status + (info.tag?.let { " · ${it.name}" } ?: ""))
+            .setContentTitle(tagged)
+            .setContentText(status)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setOngoing(true)

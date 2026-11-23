@@ -34,7 +34,7 @@ enum class LogFilter(val label: String) { ALL("All"), CATEGORISED("Categorised")
  * Everything the identifier keeps, in a private database on this phone: categories, rules, manual flags, the cached
  * result for each call-log row, and the processing log. Nothing here is ever sent anywhere.
  */
-class Store private constructor(private val app: Context) : SQLiteOpenHelper(app, "identifier.db", null, 1) {
+class Store private constructor(private val app: Context) : SQLiteOpenHelper(app, "identifier.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE categories(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color INTEGER NOT NULL, sort INTEGER NOT NULL)")
@@ -43,6 +43,7 @@ class Store private constructor(private val app: Context) : SQLiteOpenHelper(app
         db.execSQL("CREATE TABLE results(call_id INTEGER PRIMARY KEY, version INTEGER NOT NULL, category_id INTEGER, rule_id INTEGER, via TEXT NOT NULL)")
         db.execSQL("CREATE TABLE log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT NOT NULL, number TEXT NOT NULL, name TEXT, direction TEXT NOT NULL, call_ts INTEGER NOT NULL, category TEXT, via TEXT NOT NULL, rule_id INTEGER, rule_name TEXT, ms INTEGER NOT NULL, trace TEXT NOT NULL, error TEXT)")
         db.execSQL("CREATE INDEX log_ts ON log(ts)")
+        createCorrections(db)
 
         // Starter categories and example rules. The example rules are OFF; the master switch is off too.
         fun cat(name: String, color: Int, sort: Int): Long = db.insert("categories", null, ContentValues().apply {
@@ -61,9 +62,35 @@ class Store private constructor(private val app: Context) : SQLiteOpenHelper(app
         rule("Telemarketing prefix (140)", spam, 0, listOf(Condition(CondType.PREFIX, "140")))
         rule("Hidden number", spam, 1, listOf(Condition(CondType.HIDDEN)))
         rule("Unknown caller at night", spam, 2, listOf(Condition(CondType.UNKNOWN), Condition(CondType.TIME_RANGE, "22:00-07:00")))
+        rule("Declined twice in a month", spam, 3, listOf(Condition(CondType.DECLINED, "2/30")))
+        rule("Rarely answered", spam, 4, listOf(Condition(CondType.ACCEPT_RATE_BELOW, "10/5")))
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    private fun createCorrections(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE corrections(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, num_key TEXT NOT NULL, number TEXT NOT NULL, name TEXT, " +
+                "was_category TEXT, was_via TEXT NOT NULL, was_rule_id INTEGER, was_rule_name TEXT, should_category TEXT, note TEXT NOT NULL)",
+        )
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            createCorrections(db)
+            // Two example rules for what you did with a number's calls, switched off, under "Spam" if it still exists.
+            db.rawQuery("SELECT id FROM categories WHERE name='Spam' LIMIT 1", null).use { c ->
+                if (c.moveToFirst()) {
+                    val spam = c.getLong(0)
+                    val next = db.rawQuery("SELECT COALESCE(MAX(sort),-1)+1 FROM rules", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+                    fun rule(name: String, sort: Int, cond: Condition) = db.insert("rules", null, ContentValues().apply {
+                        put("name", name); put("category_id", spam); put("enabled", 0); put("sort", sort)
+                        put("conditions", ConditionCodec.encode(listOf(cond)))
+                    })
+                    rule("Declined twice in a month", next, Condition(CondType.DECLINED, "2/30"))
+                    rule("Rarely answered", next + 1, Condition(CondType.ACCEPT_RATE_BELOW, "10/5"))
+                }
+            }
+        }
+    }
 
     /** Bumped on every change to rules, categories or flags, so cached results know they are out of date. */
     private fun bump() {
@@ -202,6 +229,44 @@ class Store private constructor(private val app: Context) : SQLiteOpenHelper(app
         }
 
     fun clearResults() { writableDatabase.delete("results", null, null) }
+
+    // ---------- reported wrong ----------
+
+    fun addCorrection(number: String, name: String?, wasCategory: String?, wasVia: Via, wasRuleId: Long?, wasRuleName: String?, should: String?, note: String) {
+        writableDatabase.insert("corrections", null, ContentValues().apply {
+            put("ts", System.currentTimeMillis()); put("num_key", PhoneUtil.key(number)); put("number", number); put("name", name)
+            put("was_category", wasCategory); put("was_via", wasVia.name)
+            if (wasRuleId != null) put("was_rule_id", wasRuleId) else putNull("was_rule_id")
+            put("was_rule_name", wasRuleName); put("should_category", should); put("note", note.trim())
+        })
+    }
+
+    fun corrections(): List<Correction> = readableDatabase.query("corrections", null, null, null, null, null, "id DESC").use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                fun col(n: String) = c.getColumnIndexOrThrow(n)
+                add(
+                    Correction(
+                        c.getLong(col("id")), c.getLong(col("ts")), c.getString(col("number")), c.getString(col("name")),
+                        c.getString(col("was_category")), Via.valueOf(c.getString(col("was_via"))),
+                        col("was_rule_id").let { if (c.isNull(it)) null else c.getLong(it) },
+                        c.getString(col("was_rule_name")), c.getString(col("should_category")), c.getString(col("note")),
+                    ),
+                )
+            }
+        }
+    }
+
+    fun deleteCorrection(id: Long) { writableDatabase.delete("corrections", "id=?", arrayOf(id.toString())) }
+
+    fun clearCorrections() { writableDatabase.delete("corrections", null, null) }
+
+    fun correctionCount(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM corrections", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /** For each rule, how many different numbers were reported as wrongly categorised by it. */
+    fun wrongCounts(): Map<Long, Int> = readableDatabase.rawQuery(
+        "SELECT was_rule_id, COUNT(DISTINCT num_key) FROM corrections WHERE was_rule_id IS NOT NULL GROUP BY was_rule_id", null,
+    ).use { c -> buildMap { while (c.moveToNext()) put(c.getLong(0), c.getInt(1)) } }
 
     // ---------- the processing log ----------
 

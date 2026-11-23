@@ -49,7 +49,7 @@ fun CallBanner(info: CallInfo) {
             Icon(Icons.Filled.Call, null, Modifier.size(20.dp), tint = fg)
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(info.name ?: info.number.ifBlank { "Unknown" }, color = fg, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(callStatusLabel(info.state, seconds), color = fg, style = MaterialTheme.typography.bodySmall)
+                Text(callStatusLabel(info.state, seconds) + (info.tag?.let { " · ${it.name}" } ?: ""), color = fg, style = MaterialTheme.typography.bodySmall)
             }
             Text("Tap to return", color = fg, style = MaterialTheme.typography.labelLarge)
         }

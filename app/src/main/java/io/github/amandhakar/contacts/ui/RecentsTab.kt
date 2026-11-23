@@ -138,6 +138,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var flagging by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     val missed = e.type == CallLog.Calls.MISSED_TYPE || e.type == CallLog.Calls.REJECTED_TYPE
     val icon = when (e.type) {
         CallLog.Calls.INCOMING_TYPE -> Icons.Filled.CallReceived
@@ -219,6 +220,10 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                         Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
                     })
                     DropdownMenuItem(text = { Text("Flag as…") }, onClick = { menu = false; flagging = true })
+                    DropdownMenuItem(
+                        text = { Text(if (tag != null) "This category is wrong…" else "Should be categorised…") },
+                        onClick = { menu = false; reporting = true },
+                    )
                     DropdownMenuItem(text = { Text("Block number") }, onClick = {
                         menu = false
                         val ok = vm.blockedRepo.block(e.number)
@@ -228,6 +233,10 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                 DropdownMenuItem(text = { Text("Delete entry") }, onClick = { menu = false; vm.deleteCall(e.id) })
             }
             if (flagging) FlagDialog(vm, e.number, name.takeIf { it != e.number }) { flagging = false }
+            if (reporting) {
+                WrongDialog(e.number, name.takeIf { it != e.number }, tag?.name, tag?.via ?: io.github.amandhakar.contacts.identifier.Via.NONE, tag?.ruleId, tag?.ruleName,
+                    onChanged = { vm.reload() }, onDismiss = { reporting = false })
+            }
         }
     }
 }
