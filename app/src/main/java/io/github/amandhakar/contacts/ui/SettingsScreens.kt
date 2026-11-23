@@ -148,7 +148,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
             GroupCard {
                 InfoRow(
                     Icons.Filled.AccountCircle, "Choose accounts",
-                    "Showing ${accounts.count { vm.isAccountShown(it) }} of ${accounts.size} · new contacts save to ${vm.defaultAccount()?.title ?: "Phone only"}",
+                    "Showing: ${vm.displaySummary()} · new contacts save to ${vm.defaultAccount()?.let { it.name ?: "Phone" } ?: "Phone"}",
                     onClick = { vm.push(Screen.Accounts) },
                 )
                 if (google.isEmpty()) {

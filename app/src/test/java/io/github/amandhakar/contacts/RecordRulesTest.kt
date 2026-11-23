@@ -70,3 +70,28 @@ class AccountFilterTest {
         org.junit.Assert.assertEquals("com.google|a@b.c", io.github.amandhakar.contacts.data.AccountInfo(name = "a@b.c", type = "com.google").key)
     }
 }
+
+class AccountChoiceTest {
+    private val keys = listOf("com.google|me@gmail.com", "com.google|kiran@gmail.com", "com.whatsapp|WhatsApp", "|")
+    private val A = io.github.amandhakar.contacts.data.AccountInfo
+
+    @org.junit.Test fun showOnlyHidesEveryOtherAccount() {
+        val hidden = A.hiddenFor("com.google|me@gmail.com", keys)
+        org.junit.Assert.assertEquals(setOf("com.google|kiran@gmail.com", "com.whatsapp|WhatsApp", "|"), hidden)
+        org.junit.Assert.assertEquals("com.google|me@gmail.com", A.singleShown(hidden, keys))
+    }
+
+    @org.junit.Test fun allContactsHidesNothingAndIsNotASingleChoice() {
+        org.junit.Assert.assertEquals(emptySet<String>(), A.hiddenFor(null, keys))
+        org.junit.Assert.assertNull(A.singleShown(emptySet(), keys))
+    }
+
+    @org.junit.Test fun twoShownAccountsIsNotASingleChoice() {
+        org.junit.Assert.assertNull(A.singleShown(setOf("com.whatsapp|WhatsApp", "|"), keys))
+    }
+
+    @org.junit.Test fun phoneOnlyCanBeTheChoice() {
+        val hidden = A.hiddenFor("|", keys)
+        org.junit.Assert.assertEquals("|", A.singleShown(hidden, keys))
+    }
+}

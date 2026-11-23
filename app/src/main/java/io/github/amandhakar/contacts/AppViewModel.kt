@@ -58,6 +58,9 @@ val REQUIRED_PERMISSIONS = arrayOf(
     Manifest.permission.POST_NOTIFICATIONS,
 )
 
+const val DISPLAY_ALL = "all"
+const val DISPLAY_CUSTOM = "custom"
+
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val contactsRepo = ContactsRepo(app)
     val callLogRepo = CallLogRepo(app)
@@ -80,6 +83,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val numberIndex: StateFlow<Map<String, ContactSummary>> = _numberIndex
     private val _groupMembers = MutableStateFlow<Set<Long>>(emptySet())
     val groupMembers: StateFlow<Set<Long>> = _groupMembers
+
+    private val _totalPeople = MutableStateFlow(0)
+    /** Every contact on the phone, ignoring which accounts are shown. */
+    val totalPeople: StateFlow<Int> = _totalPeople
 
     val stack = mutableStateListOf<Screen>()
     var tab by mutableStateOf(2)
@@ -146,6 +153,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             _groups.value = contactsRepo.groups()
             _accounts.value = contactsRepo.accounts()
             _history.value = callLogRepo.load()
+            _totalPeople.value = contactsRepo.countAll()
             refreshMembers()
         }
     }
@@ -182,19 +190,35 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun clearHistory() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.clearAll(); reload() } }
     fun markMissedRead() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.markMissedRead() } }
 
-    fun isAccountShown(a: AccountInfo) = a.key !in prefs.hiddenAccounts
+    /** Accounts offered in the pickers: Google accounts, and Phone (local). */
+    fun choiceAccounts(): List<AccountInfo> {
+        val accts = _accounts.value
+        val local = accts.firstOrNull { it.name == null } ?: AccountInfo(null, null, 0)
+        return accts.filter { it.isGoogle } + local
+    }
 
-    /** Shows or hides an account's contacts in the app. Refuses to hide the last shown account. Returns false if refused. */
-    fun setAccountShown(a: AccountInfo, shown: Boolean): Boolean {
-        val hidden = prefs.hiddenAccounts.toMutableSet()
-        if (shown) hidden -= a.key
-        else {
-            hidden += a.key
-            if (_accounts.value.none { it.key !in hidden }) return false
-        }
-        prefs.hiddenAccounts = hidden
+    private fun allKeys() = (_accounts.value.map { it.key } + AccountInfo.keyOf(null, null)).distinct()
+
+    /** [DISPLAY_ALL], the key of the single account shown, or [DISPLAY_CUSTOM] for any other mix. */
+    fun displayChoice(): String {
+        val hidden = prefs.hiddenAccounts
+        if (hidden.isEmpty()) return DISPLAY_ALL
+        return AccountInfo.singleShown(hidden, allKeys()) ?: DISPLAY_CUSTOM
+    }
+
+    /** Shows only this account's contacts, or everything when null. */
+    fun showOnly(a: AccountInfo?) {
+        prefs.hiddenAccounts = AccountInfo.hiddenFor(a?.key, allKeys())
         reload()
-        return true
+    }
+
+    fun displaySummary(): String {
+        val c = displayChoice()
+        return when (c) {
+            DISPLAY_ALL -> "All contacts"
+            DISPLAY_CUSTOM -> "Custom"
+            else -> choiceAccounts().firstOrNull { it.key == c }?.let { it.name ?: "Phone" } ?: "Custom"
+        }
     }
 
     /** Where new contacts are saved: the chosen account, else the first Google account, else phone only. */

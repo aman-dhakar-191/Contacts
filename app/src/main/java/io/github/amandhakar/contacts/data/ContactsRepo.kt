@@ -27,6 +27,13 @@ import java.io.OutputStream
 class ContactsRepo(private val ctx: Context) {
     private val cr get() = ctx.contentResolver
 
+    /** Every contact on the phone, ignoring the account filter. */
+    fun countAll(): Int = try {
+        cr.query(Contacts.CONTENT_URI, arrayOf(Contacts._ID), null, null, null)?.use { it.count } ?: 0
+    } catch (_: SecurityException) {
+        0
+    }
+
     /** Contacts that have a raw contact in a shown account, or null when nothing is hidden. */
     private fun visibleIds(): Set<Long>? {
         val hidden = Prefs(ctx).hiddenAccounts
