@@ -43,6 +43,7 @@ sealed interface Screen {
     data object Merge : Screen
     data object RecordTest : Screen
     data object RecordList : Screen
+    data object Accounts : Screen
 }
 
 val REQUIRED_PERMISSIONS = arrayOf(
@@ -180,6 +181,31 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun deleteCall(id: Long) { viewModelScope.launch(Dispatchers.IO) { callLogRepo.delete(id); reload() } }
     fun clearHistory() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.clearAll(); reload() } }
     fun markMissedRead() { viewModelScope.launch(Dispatchers.IO) { callLogRepo.markMissedRead() } }
+
+    fun isAccountShown(a: AccountInfo) = a.key !in prefs.hiddenAccounts
+
+    /** Shows or hides an account's contacts in the app. Refuses to hide the last shown account. Returns false if refused. */
+    fun setAccountShown(a: AccountInfo, shown: Boolean): Boolean {
+        val hidden = prefs.hiddenAccounts.toMutableSet()
+        if (shown) hidden -= a.key
+        else {
+            hidden += a.key
+            if (_accounts.value.none { it.key !in hidden }) return false
+        }
+        prefs.hiddenAccounts = hidden
+        reload()
+        return true
+    }
+
+    /** Where new contacts are saved: the chosen account, else the first Google account, else phone only. */
+    fun defaultAccount(): AccountInfo? {
+        val key = prefs.defaultAccount
+        val accts = _accounts.value
+        if (key == AccountInfo.keyOf(null, null)) return AccountInfo(null, null)
+        return accts.firstOrNull { it.key == key && it.isGoogle } ?: accts.firstOrNull { it.isGoogle }
+    }
+
+    fun setDefaultAccount(a: AccountInfo) { prefs.defaultAccount = a.key; speedDialVersion++ }
 
     fun speedDial(slot: Int) = prefs.speedDial(slot)
     fun setSpeedDial(slot: Int, name: String, number: String) { prefs.setSpeedDial(slot, name, number); speedDialVersion++ }

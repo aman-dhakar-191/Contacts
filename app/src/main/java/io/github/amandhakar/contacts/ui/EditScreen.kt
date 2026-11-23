@@ -93,7 +93,7 @@ fun EditScreen(vm: AppViewModel, id: Long?, prefillNumber: String?) {
             loaded = true
         } else {
             if (!prefillNumber.isNullOrBlank()) phones.add(Phone.TYPE_MOBILE to prefillNumber) else phones.add(Phone.TYPE_MOBILE to "")
-            account = accounts.firstOrNull { it.isGoogle }?.let { AccountInfo(it.name, it.type) }
+            account = vm.defaultAccount()?.let { AccountInfo(it.name, it.type) }
         }
     }
 
@@ -190,6 +190,11 @@ fun EditScreen(vm: AppViewModel, id: Long?, prefillNumber: String?) {
                         )
                     }
                 }
+            }
+            if (id != null) {
+                Spacer(Modifier.height(12.dp))
+                Text("Syncs with", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(detail?.account?.title ?: "", Modifier.padding(vertical = 4.dp))
             }
             if (id == null) {
                 Spacer(Modifier.height(12.dp))

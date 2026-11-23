@@ -19,6 +19,16 @@ class Prefs(ctx: Context) {
         get() = sp.getString("record_list", "") ?: ""
         set(v) = sp.edit().putString("record_list", v).apply()
 
+    /** [AccountInfo.key]s of accounts whose contacts are not shown. Empty = show everything. */
+    var hiddenAccounts: Set<String>
+        get() = sp.getStringSet("hidden_accounts", emptySet())?.toSet() ?: emptySet()
+        set(v) = sp.edit().putStringSet("hidden_accounts", v).apply()
+
+    /** [AccountInfo.key] that new contacts are saved to (and so sync to); null = first Google account. */
+    var defaultAccount: String?
+        get() = sp.getString("default_account", null)
+        set(v) = sp.edit().putString("default_account", v).apply()
+
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
     var speakerForRecording: Boolean
         get() = sp.getBoolean("speaker_for_recording", true)
