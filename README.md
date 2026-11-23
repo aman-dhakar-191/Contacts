@@ -45,6 +45,21 @@ The call screen says why a recording started ("auto: unknown number"). Stopping 
 
 Many places require everyone on the call to agree to being recorded.
 
+## Call identifier
+
+Settings → **Call identifier** puts calls into categories (Spam, Delivery, …) by rules or by a manual flag.
+
+- **Master switch** (off by default) and a **switch per rule**. A rule that turns out to be broken (e.g. a bad pattern) is switched
+  off by itself, with the reason shown.
+- A **rule** has a name, a category and conditions that must all be true: number starts with / matches a pattern / has at most N digits /
+  is hidden, in contacts or not, has a label, name contains, call type, answered call shorter than N seconds, N calls within H hours,
+  time of day. Rules are checked top to bottom and the first match wins.
+- A **manual flag** (long-press a call in Recents, or a contact's number menu → *Flag as…*) always wins over the rules.
+- Where it shows: the call history, the call screen and the incoming-call notification.
+- **Processing log**: every record processed (live calls and call-history rows) with the outcome and the rules tried, kept on the
+  phone only (latest 2,000). Nothing from the identifier is sent to Firebase.
+- The engine is plain Kotlin (`identifier/Engine.kt`) and unit tested.
+
 ## Build
 
 ```sh

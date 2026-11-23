@@ -127,9 +127,11 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                 GroupCard {
                     d.phones.forEach { p ->
                         var menu by remember { mutableStateOf(false) }
+                        var flagging by remember { mutableStateOf(false) }
                         InfoRow(
                             Icons.Filled.Call, p.number, p.label, onClick = { Dialer.call(ctx, p.number) },
                             trailing = {
+                                if (flagging) FlagDialog(vm, p.number, d.name) { flagging = false }
                                 IconButton(onClick = { sms(p.number) }) { Icon(Icons.AutoMirrored.Filled.Message, "Message") }
                                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -143,6 +145,7 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                                             Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
                                         },
                                     )
+                                    DropdownMenuItem(text = { Text("Flag as…") }, onClick = { menu = false; flagging = true })
                                     DropdownMenuItem(text = { Text("WhatsApp") }, onClick = {
                                         menu = false
                                         try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${PhoneUtil.digits(p.number)}"))) } catch (_: Exception) {}

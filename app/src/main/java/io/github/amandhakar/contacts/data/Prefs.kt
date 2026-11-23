@@ -57,6 +57,16 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("telemetry", true)
         set(v) = sp.edit().putBoolean("telemetry", v).apply()
 
+    /** Master switch of the call identifier (rules + manual flags). Off until the user turns it on. */
+    var identifierOn: Boolean
+        get() = sp.getBoolean("identifier_on", false)
+        set(v) = sp.edit().putBoolean("identifier_on", v).apply()
+
+    /** Bumped whenever identifier rules, categories or flags change, so cached results are redone. */
+    var identifierVersion: Int
+        get() = sp.getInt("identifier_version", 1)
+        set(v) = sp.edit().putInt("identifier_version", v).apply()
+
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
     var speakerForRecording: Boolean
         get() = sp.getBoolean("speaker_for_recording", true)
