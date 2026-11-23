@@ -17,8 +17,10 @@ import io.github.amandhakar.contacts.MainActivity
 import io.github.amandhakar.contacts.R
 
 object Notifications {
-    const val CH_INCOMING = "incoming"
-    const val CH_ONGOING = "ongoing"
+    // New ids: a channel's sound/importance can't be changed once created. Android itself rings for an incoming call,
+    // so these channels are silent (the old "incoming" channel had its own sound and could ring twice).
+    const val CH_INCOMING = "incoming_call"
+    const val CH_ONGOING = "ongoing_call"
     const val CH_MISSED = "missed"
     const val CH_RECORDING = "recording"
 
@@ -29,11 +31,24 @@ object Notifications {
 
     fun createChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CH_INCOMING, "Incoming calls", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel(CH_ONGOING, "Ongoing calls", NotificationManager.IMPORTANCE_LOW))
+        nm.deleteNotificationChannel("incoming")
+        nm.deleteNotificationChannel("ongoing")
+        nm.createNotificationChannel(silent(NotificationChannel(CH_INCOMING, "Incoming calls", NotificationManager.IMPORTANCE_HIGH)))
+        nm.createNotificationChannel(silent(NotificationChannel(CH_ONGOING, "Ongoing calls", NotificationManager.IMPORTANCE_DEFAULT)))
         nm.createNotificationChannel(NotificationChannel(CH_MISSED, "Missed calls", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(CH_RECORDING, "Call recording", NotificationManager.IMPORTANCE_LOW))
     }
+
+    private fun silent(c: NotificationChannel) = c.apply {
+        setSound(null, null)
+        enableVibration(false)
+        setShowBadge(false)
+    }
+
+    private fun action(ctx: Context, action: String, request: Int): PendingIntent = PendingIntent.getBroadcast(
+        ctx, request, Intent(ctx, CallActionReceiver::class.java).setAction(action),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     private fun canPost(ctx: Context) =
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -58,6 +73,7 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setFullScreenIntent(callActivity(ctx), true)
             .setContentIntent(callActivity(ctx))
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, callActivity(ctx, answer = true)))
@@ -65,18 +81,35 @@ object Notifications {
         NotificationManagerCompat.from(ctx).notify(ID_INCOMING, n)
     }
 
-    fun ongoing(ctx: Context, info: CallInfo) {
+    /**
+     * The live notification for the call in progress: who, how long, and Speaker / Mute / End call buttons.
+     * A plain ongoing notification (not CallStyle), so it needs no foreground service.
+     */
+    fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
-        val n = NotificationCompat.Builder(ctx, CH_ONGOING)
+        val status = when (info.state) {
+            android.telecom.Call.STATE_HOLDING -> "On hold"
+            android.telecom.Call.STATE_ACTIVE -> "Ongoing call"
+            else -> "Calling…"
+        } + if (otherCalls > 0) " · +$otherCalls more" else ""
+        val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
+        val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle(label)
-            .setContentText("Ongoing call — tap to return")
+            .setContentText(status)
             .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setContentIntent(callActivity(ctx))
-            .build()
-        NotificationManagerCompat.from(ctx).notify(ID_ONGOING, n)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(0, if (speakerOn) "Speaker off" else "Speaker", action(ctx, CallActionReceiver.ACTION_SPEAKER, 31))
+            .addAction(0, if (muted) "Unmute" else "Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
+            .addAction(0, "End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
+        if (live) b.setUsesChronometer(true).setWhen(info.connectTimeMillis).setShowWhen(true) else b.setShowWhen(false)
+        NotificationManagerCompat.from(ctx).notify(ID_ONGOING, b.build())
     }
 
     fun cancelIncoming(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_INCOMING)

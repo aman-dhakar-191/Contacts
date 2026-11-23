@@ -36,7 +36,7 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         val cb = object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) = handleState(call, state)
-            override fun onDetailsChanged(call: Call, details: Call.Details) = CallHub.refresh()
+            override fun onDetailsChanged(call: Call, details: Call.Details) { CallHub.refresh(); updateNotifications() }
         }
         call.registerCallback(cb)
         callbacks[call] = cb
@@ -44,13 +44,10 @@ class CallService : InCallService() {
         Telemetry.event("call_added", "incoming" to (call.details.callDirection == Call.Details.DIRECTION_INCOMING))
 
         val number = call.details.handle?.schemeSpecificPart ?: ""
-        scope.launch { CallHub.setCaller(call, ContactsRepo(applicationContext).lookup(number)) }
+        scope.launch { CallHub.setCaller(call, ContactsRepo(applicationContext).lookup(number)); updateNotifications() }
 
-        if (call.state == Call.STATE_RINGING) {
-            CallHub.ringing()?.let { Notifications.incoming(this, it) }
-        } else {
-            openCallScreen()
-        }
+        updateNotifications()
+        if (call.state != Call.STATE_RINGING) openCallScreen()
     }
 
     override fun onCallRemoved(call: Call) {
@@ -59,28 +56,49 @@ class CallService : InCallService() {
         val wasAnswered = answered.remove(call)
         autoDecided.remove(call)
         CallHub.remove(call)
-        Notifications.cancelIncoming(this)
+        updateNotifications()
 
         val cause = call.details.disconnectCause?.code
         if (info != null && info.incoming && !wasAnswered && cause == DisconnectCause.MISSED) {
             Telemetry.event("call_missed")
             Notifications.missed(this, info.number, info.name)
         }
-        if (CallHub.calls.value.isEmpty()) {
+        if (CallHub.calls.value.isEmpty()) RecorderService.stop(this)
+    }
+
+    override fun onCallAudioStateChanged(audioState: CallAudioState?) {
+        CallHub.setAudio(audioState)
+        updateNotifications() // so the Speaker / Mute button labels follow the real state
+    }
+
+    @Volatile private var incomingShown: String? = null
+
+    /** The one place that decides what is in the notification shade: Answer/Decline while ringing, else the live call. */
+    @Synchronized private fun updateNotifications() {
+        val calls = CallHub.calls.value
+        val ringing = calls.firstOrNull { it.state == Call.STATE_RINGING }
+        if (ringing != null) {
+            val key = "${System.identityHashCode(ringing.call)}:${ringing.name}"
+            if (key != incomingShown) { incomingShown = key; Notifications.incoming(this, ringing) }
+        } else if (incomingShown != null) {
+            incomingShown = null
+            Notifications.cancelIncoming(this)
+        }
+        val current = CallHub.current()
+        if (current != null) {
+            val audio = CallHub.audio.value
+            Notifications.ongoing(this, current, calls.size - 1, audio?.route == CallAudioState.ROUTE_SPEAKER, audio?.isMuted == true)
+        } else {
             Notifications.cancelOngoing(this)
-            RecorderService.stop(this)
         }
     }
 
-    override fun onCallAudioStateChanged(audioState: CallAudioState?) = CallHub.setAudio(audioState)
-
     private fun handleState(call: Call, @Suppress("UNUSED_PARAMETER") state: Int) {
         CallHub.refresh()
+        updateNotifications()
         val info = CallHub.calls.value.firstOrNull { it.call == call } ?: return
-        if (info.state != Call.STATE_RINGING) Notifications.cancelIncoming(this)
         if (info.state == Call.STATE_ACTIVE) {
             answered += call
-            Notifications.ongoing(this, info)
             // Decide once per call, so stopping a recording by hand isn't undone when the call comes off hold.
             if (autoDecided.add(call) && !RecorderState.active.value) {
                 scope.launch {
