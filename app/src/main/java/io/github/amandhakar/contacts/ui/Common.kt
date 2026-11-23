@@ -40,7 +40,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -147,30 +156,40 @@ fun SwipeActionRow(
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var returnJob by remember { mutableStateOf<Job?>(null) }
+    val haptic = LocalHapticFeedback.current
     val latestOnSwipeLeft by rememberUpdatedState(onSwipeLeft)
     val latestOnSwipeRight by rememberUpdatedState(onSwipeRight)
     val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
+    val threshold = revealPx * 0.42f
+    // Past the threshold, letting go runs the action: say so with colour and a short tick.
+    val rightArmed by remember(threshold) { derivedStateOf { dragOffset >= threshold } }
+    val leftArmed by remember(threshold) { derivedStateOf { dragOffset <= -threshold } }
+    LaunchedEffect(rightArmed, leftArmed) {
+        if (rightArmed || leftArmed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
 
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
-                SwipeActionSlot(swipeRight, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeRight, rightArmed, Modifier.width(revealWidth))
             }
             Spacer(Modifier.weight(1f))
             if (swipeLeft != SwipeAction.NONE) {
-                SwipeActionSlot(swipeLeft, Modifier.width(revealWidth))
+                SwipeActionSlot(swipeLeft, leftArmed, Modifier.width(revealWidth))
             }
         }
         Box(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .offset { IntOffset((if (dragging) dragOffset else 0f).roundToInt(), 0) }
+                .offset { IntOffset(dragOffset.roundToInt(), 0) }
                 .pointerInput(swipeLeft, swipeRight, revealPx) {
                     detectHorizontalDragGestures(
                         onDragStart = {
+                            returnJob?.cancel()   // grabbing the row while it is still sliding back
                             dragging = true
-                            dragOffset = 0f
                         },
                         onHorizontalDrag = { change, amount ->
                             change.consume()
@@ -179,15 +198,15 @@ fun SwipeActionRow(
                         onDragEnd = {
                             val completedOffset = dragOffset
                             dragging = false
-                            dragOffset = 0f
-                            if (abs(completedOffset) >= revealPx * 0.42f) {
+                            returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(160)) { v, _ -> dragOffset = v } }
+                            if (abs(completedOffset) >= threshold) {
                                 if (completedOffset > 0f) latestOnSwipeRight()
                                 else latestOnSwipeLeft()
                             }
                         },
                         onDragCancel = {
                             dragging = false
-                            dragOffset = 0f
+                            returnJob = scope.launch { animate(dragOffset, 0f, animationSpec = tween(160)) { v, _ -> dragOffset = v } }
                         },
                     )
                 },
@@ -198,7 +217,7 @@ fun SwipeActionRow(
 }
 
 @Composable
-private fun SwipeActionSlot(action: SwipeAction, modifier: Modifier = Modifier) {
+private fun SwipeActionSlot(action: SwipeAction, armed: Boolean, modifier: Modifier = Modifier) {
     val icon = when (action) {
         SwipeAction.CALL -> Icons.Filled.Call
         SwipeAction.MESSAGE -> Icons.Filled.Message
@@ -209,7 +228,7 @@ private fun SwipeActionSlot(action: SwipeAction, modifier: Modifier = Modifier) 
     }
     Column(
         modifier.fillMaxHeight()
-            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .background(if (armed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
             .padding(horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -217,14 +236,14 @@ private fun SwipeActionSlot(action: SwipeAction, modifier: Modifier = Modifier) 
         Icon(
             imageVector = icon,
             contentDescription = action.label,
-            modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(if (armed) 28.dp else 24.dp),
+            tint = if (armed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
         )
         Text(
             action.label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            maxLines = 1,
+            color = if (armed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
