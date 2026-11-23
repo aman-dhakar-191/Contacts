@@ -201,6 +201,21 @@ class ContactsRepo(private val ctx: Context) {
         return ContactDetail(id, lookup, name, photo, starred, phones, emails.distinct(), groups, raw, account)
     }
 
+    /** Every contact number in one query, over every account: last-10-digits key -> (contact id, name). */
+    fun numberDirectory(): Map<String, Pair<Long, String>> {
+        val out = HashMap<String, Pair<Long, String>>()
+        try {
+            cr.query(Phone.CONTENT_URI, arrayOf(Phone.CONTACT_ID, Phone.NUMBER, Phone.DISPLAY_NAME), null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val key = PhoneUtil.key(c.getString(1) ?: continue)
+                    if (key.isNotEmpty()) out.putIfAbsent(key, c.getLong(0) to (c.getString(2) ?: ""))
+                }
+            }
+        } catch (_: SecurityException) {
+        }
+        return out
+    }
+
     fun lookup(number: String): CallerInfo? {
         if (number.isBlank()) return null
         return try {

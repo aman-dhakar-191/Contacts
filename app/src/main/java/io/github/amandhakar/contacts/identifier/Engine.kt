@@ -19,8 +19,39 @@ object Engine {
         data class Err(val msg: String) : R
     }
 
-    fun classify(rec: CallRecord, rules: List<Rule>, categories: Map<Long, Category>, flags: Map<String, Long>, env: Env): Outcome {
-        val key = PhoneUtil.key(rec.number)
+    /** What is looked at for one call. Worked out once, then shared by every condition of every rule. */
+    class View(val rec: CallRecord) {
+        val n: String = normalized(rec.number)
+        val digits: String = PhoneUtil.digits(n)
+        val key: String = PhoneUtil.key(n)
+    }
+
+    /** One condition with its settings already parsed (regex compiled, numbers read) and a rough cost. */
+    class Cond(val c: Condition, val cost: Int, val test: (View, Env) -> R)
+
+    /** A rule ready to run. [error] is set when it can never work (bad pattern, no conditions, ...). */
+    class Prepared(val rule: Rule, val error: String?, val conds: List<Cond>)
+
+    /**
+     * Parses and validates the rules once, instead of once per call per rule. Within a rule every condition must match,
+     * so they can run in any order: cheap checks on the number go first and the ones that look things up come last, so most
+     * rules are rejected without touching the contacts or the call log.
+     */
+    fun prepare(rules: List<Rule>): List<Prepared> = rules.map { rule ->
+        if (!rule.enabled) Prepared(rule, null, emptyList())
+        else {
+            val error = validate(rule)
+            Prepared(rule, error, if (error != null) emptyList() else rule.conditions.map { prepare(it) }.sortedBy { it.cost })
+        }
+    }
+
+    /** One-off convenience: prepares and classifies. Use [prepare] + [classifyPrepared] when classifying many calls. */
+    fun classify(rec: CallRecord, rules: List<Rule>, categories: Map<Long, Category>, flags: Map<String, Long>, env: Env): Outcome =
+        classifyPrepared(rec, prepare(rules), categories, flags, env)
+
+    fun classifyPrepared(rec: CallRecord, rules: List<Prepared>, categories: Map<Long, Category>, flags: Map<String, Long>, env: Env): Outcome {
+        val view = View(rec)
+        val key = view.key
         if (key.isNotEmpty()) {
             if (flags[key] == EXEMPT) {
                 return Outcome(Via.MANUAL, null, null, listOf(TraceEntry("Manual flag", "this number is flagged as never categorised")))
@@ -32,18 +63,18 @@ object Engine {
         }
         val trace = ArrayList<TraceEntry>()
         val errors = ArrayList<Pair<Long, String>>()
-        for (rule in rules) {
+        for (p in rules) {
+            val rule = p.rule
             if (!rule.enabled) { trace += TraceEntry(rule.name, "off"); continue }
             val cat = categories[rule.categoryId]
             if (cat == null) { trace += TraceEntry(rule.name, "skipped: its category was removed"); continue }
-            val bad = validate(rule)
-            if (bad != null) { errors += rule.id to bad; trace += TraceEntry(rule.name, "error: $bad"); continue }
+            if (p.error != null) { errors += rule.id to p.error; trace += TraceEntry(rule.name, "error: ${p.error}"); continue }
             var failed: String? = null
             var broke: String? = null
-            for (c in rule.conditions) {
-                when (val r = eval(c, rec, env)) {
+            for (cond in p.conds) {
+                when (val r = cond.test(view, env)) {
                     R.Match -> {}
-                    is R.No -> { failed = "${c.type.label}: ${r.why}"; break }
+                    is R.No -> { failed = "${cond.c.type.label}: ${r.why}"; break }
                     is R.Err -> { broke = r.msg; break }
                 }
             }
@@ -81,83 +112,125 @@ object Engine {
         CondType.HIDDEN, CondType.UNKNOWN, CondType.KNOWN -> null
     }
 
-    private fun normalized(number: String) = number.filter { it.isDigit() || it == '+' }
+    internal fun normalized(number: String) = number.filter { it.isDigit() || it == '+' }
 
-    fun eval(c: Condition, rec: CallRecord, env: Env): R {
-        paramError(c)?.let { return R.Err(it) }
-        val n = normalized(rec.number)
-        val digits = PhoneUtil.digits(n)
+    /** Evaluates one condition against one call (prepares it first; for one-off use and tests). */
+    fun eval(c: Condition, rec: CallRecord, env: Env): R = prepare(c).test(View(rec), env)
+
+    private const val COST_NUMBER = 0
+    private const val COST_REGEX = 1
+    private const val COST_CONTACT = 2
+    private const val COST_LABEL = 3
+    private const val COST_HISTORY = 4
+
+    /** Reads the settings of a condition once and returns the check for it. */
+    fun prepare(c: Condition): Cond {
+        paramError(c)?.let { msg -> return Cond(c, COST_HISTORY) { _, _ -> R.Err(msg) } }
         return when (c.type) {
             CondType.PREFIX -> {
                 val p = normalized(c.param)
                 val pd = PhoneUtil.digits(p)
-                if (n.startsWith(p) || digits.startsWith(pd) || PhoneUtil.key(n).startsWith(pd)) R.Match else R.No("number is ${rec.number.ifBlank { "hidden" }}")
+                Cond(c, COST_NUMBER) { v, _ ->
+                    if (v.n.startsWith(p) || v.digits.startsWith(pd) || v.key.startsWith(pd)) R.Match else R.No("number is ${v.rec.number.ifBlank { "hidden" }}")
+                }
             }
-            CondType.REGEX -> if (n.isNotEmpty() && Regex(c.param).containsMatchIn(n)) R.Match else R.No("no match in ${n.ifEmpty { "hidden number" }}")
-            CondType.MAX_DIGITS -> when {
-                n.isEmpty() -> R.No("number is hidden")
-                digits.length <= c.param.trim().toInt() -> R.Match
-                else -> R.No("${digits.length} digits")
+            CondType.REGEX -> {
+                val re = Regex(c.param)
+                Cond(c, COST_REGEX) { v, _ -> if (v.n.isNotEmpty() && re.containsMatchIn(v.n)) R.Match else R.No("no match in ${v.n.ifEmpty { "hidden number" }}") }
             }
-            CondType.HIDDEN -> if (n.isEmpty()) R.Match else R.No("number is shown")
-            CondType.UNKNOWN -> if (!env.isKnown(rec.number)) R.Match else R.No("number is in contacts")
-            CondType.KNOWN -> if (env.isKnown(rec.number)) R.Match else R.No("number is not in contacts")
-            CondType.LABEL -> if (env.labelsOf(rec.number).any { it.equals(c.param.trim(), ignoreCase = true) }) R.Match else R.No("contact has no such label")
+            CondType.MAX_DIGITS -> {
+                val max = c.param.trim().toInt()
+                Cond(c, COST_NUMBER) { v, _ ->
+                    when {
+                        v.n.isEmpty() -> R.No("number is hidden")
+                        v.digits.length <= max -> R.Match
+                        else -> R.No("${v.digits.length} digits")
+                    }
+                }
+            }
+            CondType.HIDDEN -> Cond(c, COST_NUMBER) { v, _ -> if (v.n.isEmpty()) R.Match else R.No("number is shown") }
+            CondType.UNKNOWN -> Cond(c, COST_CONTACT) { v, env -> if (!env.isKnown(v.rec.number)) R.Match else R.No("number is in contacts") }
+            CondType.KNOWN -> Cond(c, COST_CONTACT) { v, env -> if (env.isKnown(v.rec.number)) R.Match else R.No("number is not in contacts") }
+            CondType.LABEL -> {
+                val label = c.param.trim()
+                Cond(c, COST_LABEL) { v, env -> if (env.labelsOf(v.rec.number).any { it.equals(label, ignoreCase = true) }) R.Match else R.No("contact has no such label") }
+            }
             CondType.NAME_CONTAINS -> {
-                val name = env.contactName(rec.number) ?: rec.nameHint.orEmpty()
-                if (name.contains(c.param.trim(), ignoreCase = true)) R.Match else R.No("name is \"${name.ifEmpty { "unknown" }}\"")
+                val part = c.param.trim()
+                Cond(c, COST_CONTACT) { v, env ->
+                    val name = env.contactName(v.rec.number) ?: v.rec.nameHint.orEmpty()
+                    if (name.contains(part, ignoreCase = true)) R.Match else R.No("name is \"${name.ifEmpty { "unknown" }}\"")
+                }
             }
-            CondType.DIRECTION -> if (directionOf(c.param) == rec.direction) R.Match else R.No("call is ${rec.direction.name.lowercase()}")
+            CondType.DIRECTION -> {
+                val want = directionOf(c.param)
+                Cond(c, COST_NUMBER) { v, _ -> if (want == v.rec.direction) R.Match else R.No("call is ${v.rec.direction.name.lowercase()}") }
+            }
             CondType.SHORT_CALL -> {
-                val d = rec.durationSec
-                when {
-                    d == null -> R.No("needs a finished call")
-                    d <= 0 -> R.No("call was not answered")
-                    d <= c.param.trim().toInt() -> R.Match
-                    else -> R.No("lasted $d s")
+                val max = c.param.trim().toInt()
+                Cond(c, COST_NUMBER) { v, _ ->
+                    val d = v.rec.durationSec
+                    when {
+                        d == null -> R.No("needs a finished call")
+                        d <= 0 -> R.No("call was not answered")
+                        d <= max -> R.Match
+                        else -> R.No("lasted $d s")
+                    }
                 }
             }
             CondType.REPEAT -> {
                 val (need, hours) = parseRepeat(c.param)!!
-                if (n.isEmpty()) R.No("number is hidden")
-                else {
-                    // a ringing call is not in the call log yet, so count it too
-                    val count = env.callsFrom(rec.number, rec.timeMs, hours * 3_600_000L) + if (rec.source == Source.LIVE) 1 else 0
-                    if (count >= need) R.Match else R.No("$count call(s) in $hours h")
+                val window = hours * 3_600_000L
+                Cond(c, COST_HISTORY) { v, env ->
+                    if (v.n.isEmpty()) R.No("number is hidden")
+                    else {
+                        // a ringing call is not in the call log yet, so count it too
+                        val count = env.callsFrom(v.rec.number, v.rec.timeMs, window) + if (v.rec.source == Source.LIVE) 1 else 0
+                        if (count >= need) R.Match else R.No("$count call(s) in $hours h")
+                    }
                 }
             }
             CondType.ANSWERED, CondType.DECLINED, CondType.MISSED, CondType.CALLED_BY_ME -> {
                 val (need, days) = parseCountWindow(c.param)!!
-                if (n.isEmpty()) R.No("number is hidden")
-                else {
-                    val st = env.stats(rec.number, rec.timeMs, windowMs(days))
-                    val count = when (c.type) {
-                        CondType.ANSWERED -> st.answered
-                        CondType.DECLINED -> st.declined + st.blocked
-                        CondType.MISSED -> st.missed
-                        else -> st.outgoing
+                val window = windowMs(days)
+                val type = c.type
+                Cond(c, COST_HISTORY) { v, env ->
+                    if (v.n.isEmpty()) R.No("number is hidden")
+                    else {
+                        val st = env.stats(v.rec.number, v.rec.timeMs, window)
+                        val count = when (type) {
+                            CondType.ANSWERED -> st.answered
+                            CondType.DECLINED -> st.declined + st.blocked
+                            CondType.MISSED -> st.missed
+                            else -> st.outgoing
+                        }
+                        if (count >= need) R.Match else R.No("$count ${if (days == 0) "ever" else "in $days days"}")
                     }
-                    if (count >= need) R.Match else R.No("$count ${if (days == 0) "ever" else "in $days days"}")
                 }
             }
             CondType.ACCEPT_RATE_BELOW, CondType.ACCEPT_RATE_ABOVE -> {
                 val (percent, minCalls, days) = parseRate(c.param)!!
-                if (n.isEmpty()) R.No("number is hidden")
-                else {
-                    val st = env.stats(rec.number, rec.timeMs, windowMs(days))
-                    if (st.offered < minCalls) R.No("only ${st.offered} call(s) rang you, need $minCalls")
+                val window = windowMs(days)
+                val below = c.type == CondType.ACCEPT_RATE_BELOW
+                Cond(c, COST_HISTORY) { v, env ->
+                    if (v.n.isEmpty()) R.No("number is hidden")
                     else {
-                        val rate = st.answered * 100.0 / st.offered
-                        val ok = if (c.type == CondType.ACCEPT_RATE_BELOW) rate < percent else rate >= percent
-                        if (ok) R.Match else R.No("you answered ${"%.0f".format(rate)}% of ${st.offered}")
+                        val st = env.stats(v.rec.number, v.rec.timeMs, window)
+                        if (st.offered < minCalls) R.No("only ${st.offered} call(s) rang you, need $minCalls")
+                        else {
+                            val rate = st.answered * 100.0 / st.offered
+                            if (if (below) rate < percent else rate >= percent) R.Match else R.No("you answered ${"%.0f".format(rate)}% of ${st.offered}")
+                        }
                     }
                 }
             }
             CondType.TIME_RANGE -> {
                 val (from, to) = parseTimeRange(c.param)!!
-                val m = minuteOfDay(rec.timeMs)
-                val inside = if (from <= to) m in from until to else m >= from || m < to
-                if (inside) R.Match else R.No("call time ${"%02d:%02d".format(m / 60, m % 60)}")
+                Cond(c, COST_NUMBER) { v, _ ->
+                    val m = minuteOfDay(v.rec.timeMs)
+                    val inside = if (from <= to) m in from until to else m >= from || m < to
+                    if (inside) R.Match else R.No("call time ${"%02d:%02d".format(m / 60, m % 60)}")
+                }
             }
         }
     }

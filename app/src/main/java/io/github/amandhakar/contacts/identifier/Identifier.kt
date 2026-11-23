@@ -26,17 +26,23 @@ object Identifier {
         else -> Direction.OTHER
     }
 
-    /** Looks things up in the phone's contacts. Cached per number for the length of one run. */
-    class AppEnv(ctx: Context, loadHistory: () -> List<CallEntry>) : Env {
-        // Only read the call log if a rule actually asks what you did with the number before.
-        private val history by lazy(loadHistory)
+    /**
+     * Looks things up in the phone's contacts and the call log. For a whole run over the call history, [useDirectory] reads every
+     * contact number in one query; for a single ringing call one lookup is cheaper.
+     */
+    class AppEnv(ctx: Context, private val useDirectory: Boolean = false, loadHistory: () -> List<CallEntry>) : Env {
+        // Only read the call log (and index it) if a rule actually asks what you did with the number before.
+        private val index by lazy { HistoryStats(loadHistory().map { HistoryStats.Entry(PhoneUtil.key(it.number), it.date, it.type) }) }
         private val repo = ContactsRepo(ctx)
+        private val directory by lazy { repo.numberDirectory() }
         private val who = HashMap<String, Pair<Long, String>?>()
         private val groupTitles by lazy { repo.groups().associate { it.id to it.title } }
         private val labels = HashMap<Long, Set<String>>()
 
         private fun lookup(number: String): Pair<Long, String>? {
-            if (PhoneUtil.key(number).isEmpty()) return null
+            val key = PhoneUtil.key(number)
+            if (key.isEmpty()) return null
+            if (useDirectory) return directory[key]
             return who.getOrPut(number) { repo.lookup(number)?.let { it.contactId to it.name } }
         }
 
@@ -49,19 +55,7 @@ object Identifier {
 
         override fun stats(number: String, untilMs: Long, windowMs: Long): ActionStats {
             val key = PhoneUtil.key(number)
-            if (key.isEmpty()) return ActionStats()
-            var answered = 0; var outgoing = 0; var missed = 0; var declined = 0; var blocked = 0
-            for (e in history) {
-                if (e.date > untilMs || e.date <= untilMs - windowMs || PhoneUtil.key(e.number) != key) continue
-                when (e.type) {
-                    CallLog.Calls.INCOMING_TYPE -> answered++
-                    CallLog.Calls.OUTGOING_TYPE -> outgoing++
-                    CallLog.Calls.MISSED_TYPE -> missed++
-                    CallLog.Calls.REJECTED_TYPE -> declined++
-                    CallLog.Calls.BLOCKED_TYPE -> blocked++
-                }
-            }
-            return ActionStats(answered, outgoing, missed, declined, blocked)
+            return if (key.isEmpty()) ActionStats() else index.stats(key, untilMs, windowMs)
         }
     }
 
@@ -115,7 +109,8 @@ object Identifier {
         val ruleById = rules.associateBy { it.id }
         val out = HashMap<Long, Tag>()
         // Frequency / acceptance rules look at more history than the list on screen shows.
-        val env = AppEnv(ctx) { io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS) }
+        val env = AppEnv(ctx, useDirectory = true) { io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS) }
+        val prepared = Engine.prepare(rules)   // parse, validate and compile the rules once for the whole run
         val broken = LinkedHashMap<Long, String>()
 
         fun fromCache(r: StoredResult): Tag? {
@@ -133,7 +128,7 @@ object Identifier {
                     var o: Outcome
                     var failure: String? = null
                     try {
-                        o = Engine.classify(rec, rules, categories, flags, env)
+                        o = Engine.classifyPrepared(rec, prepared, categories, flags, env)
                     } catch (ex: Exception) {
                         o = Outcome(Via.NONE, null, null, emptyList())
                         failure = "${ex.javaClass.simpleName}: ${ex.message}"
