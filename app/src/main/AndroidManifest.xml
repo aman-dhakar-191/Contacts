@@ -79,5 +79,19 @@
             android:foregroundServiceType="microphone" />
 
         <receiver android:name=".call.CallActionReceiver" android:exported="false" />
+
+        <!-- Off until you turn it on in Android settings. Does nothing; used by the recording test. -->
+        <service
+            android:name=".call.AccessibilityHelper"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_helper" />
+        </service>
     </application>
 </manifest>

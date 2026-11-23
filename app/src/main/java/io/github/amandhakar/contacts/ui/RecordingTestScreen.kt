@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.amandhakar.contacts.AppViewModel
+import io.github.amandhakar.contacts.call.AccessibilityHelper
 import io.github.amandhakar.contacts.call.CallHub
 import io.github.amandhakar.contacts.call.ProbeResult
 import io.github.amandhakar.contacts.call.ProbeStatus
@@ -86,10 +87,28 @@ fun ProbeControls(hasCall: Boolean) {
     }
 
     Text(
-        "1. Start a call and put it on speaker.\n2. Tap Run. Both of you keep talking for about " +
-            "${RecordingProbe.totalSeconds} seconds.\n3. Play each sample: you will hear who it caught.",
+        "1. Start a call. Tap Run; both of you keep talking for about ${RecordingProbe.totalSeconds} seconds.\n" +
+            "2. Play each sample: you will hear who it caught.\n" +
+            "3. Run it twice: once with the speaker ON, once with the speaker OFF (earpiece). An input that has the other " +
+            "person with the speaker OFF is true two-way recording.",
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    Spacer(Modifier.height(12.dp))
+    val a11y = remember { mutableStateOf(AccessibilityHelper.isEnabled(ctx)) }
+    LaunchedEffect(running) { a11y.value = AccessibilityHelper.isEnabled(ctx) }
+    androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Accessibility helper: " + if (a11y.value) "ON" else "off", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Some phones allow more recording inputs when an accessibility service is on. This one does nothing and does not read " +
+                    "the screen. Turn it on in Android settings, run the test again, and compare.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = {
+                try { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
+            }) { Text("Open accessibility settings") }
+        }
+    }
     Spacer(Modifier.height(12.dp))
     Button(
         enabled = hasCall && !running && !recording,
