@@ -147,7 +147,7 @@ fun SwipeActionRow(
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
 
     Box(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
                 SwipeActionSlot(swipeRight.label, { settledOffset = 0f; dragOffset = 0f; onSwipeRight() }, Modifier.width(revealWidth))
             }
