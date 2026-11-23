@@ -26,6 +26,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.MergeType
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -69,14 +83,10 @@ import java.util.Date
 
 @Composable
 private fun Page(title: String, vm: AppViewModel, content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit) {
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(title) }, navigationIcon = { IconButton(onClick = { vm.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        TopAppBar(title = { Text(title) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), navigationIcon = { IconButton(onClick = { vm.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
     }) { content(it) }
 }
-
-@Composable
-private fun SectionTitle(t: String) =
-    Text(t, Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDialer: () -> Unit) {
@@ -86,6 +96,8 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
     var autoRecord by remember { mutableStateOf(vm.prefs.autoRecord) }
     var speakerRec by remember { mutableStateOf(vm.prefs.speakerForRecording) }
     val google = accounts.filter { it.isGoogle }
+    val local = accounts.firstOrNull { it.name == null }
+    val others = accounts.filter { !it.isGoogle && it.name != null }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -118,29 +130,33 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
 
     Page("Settings", vm) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
-            SectionTitle("Phone app")
-            Row(Modifier.fillMaxWidth().padding(16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (vm.isDefaultDialer) "This is your default phone app." else "Not the default phone app yet: it can't answer calls or block numbers.", Modifier.weight(1f))
-                if (!vm.isDefaultDialer) TextButton(onClick = requestDefaultDialer) { Text("Set") }
+            SectionLabel("Phone app")
+            GroupCard {
+                InfoRow(
+                    Icons.Filled.Phone,
+                    if (vm.isDefaultDialer) "Default phone app" else "Not your default phone app",
+                    if (vm.isDefaultDialer) "Calls ring and are answered here." else "Set it to answer calls here and block numbers.",
+                    trailing = { if (!vm.isDefaultDialer) Button(onClick = requestDefaultDialer) { Text("Set") } },
+                )
+                InfoRow(Icons.Filled.Security, "Permissions", "Check that contacts, phone, call log, microphone and notifications are allowed", onClick = requestPermissions)
             }
-            TextButton(onClick = requestPermissions, Modifier.padding(horizontal = 8.dp)) { Text("Re-check permissions") }
 
-            HorizontalDivider()
-            SectionTitle("Google contacts")
-            Text(
-                "Contacts from a Google account on this phone appear here automatically; edits sync back to Google. " +
-                    "If your contacts are missing, add the account and turn on contacts sync.",
-                Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium,
-            )
-            accounts.forEach { a ->
-                Text("• ${a.title}: ${a.count} contacts" + if (a.isGoogle) " (Google)" else "", Modifier.padding(16.dp, 2.dp))
-            }
-            if (google.isEmpty()) Text("No Google account found in contacts.", Modifier.padding(16.dp, 4.dp), color = MaterialTheme.colorScheme.error)
-            Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = {
+            SectionLabel("Google contacts")
+            GroupCard {
+                if (google.isEmpty()) {
+                    InfoRow(Icons.Filled.AccountCircle, "No Google account on this phone", "Add one and turn on contacts sync; your contacts will appear here.")
+                }
+                google.forEach { a ->
+                    InfoRow(Icons.Filled.AccountCircle, a.name ?: "", if (a.count == 1) "1 contact" else "${a.count} contacts")
+                }
+                if (local != null) InfoRow(Icons.Filled.Phone, "On this phone only", if (local.count == 1) "1 contact, not synced" else "${local.count} contacts, not synced")
+                if (others.isNotEmpty()) {
+                    InfoRow(null, "Also shown (read-only): " + others.joinToString { it.title })
+                }
+                InfoRow(Icons.Filled.PersonAdd, "Add Google account", onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_ADD_ACCOUNT).putExtra(Settings.EXTRA_ACCOUNT_TYPES, arrayOf("com.google")))
-                }) { Text("Add Google account") }
-                TextButton(onClick = {
+                })
+                InfoRow(Icons.Filled.Sync, "Sync now", "Edits you make here sync back to Google.", onClick = {
                     google.forEach { a ->
                         val n = a.name ?: return@forEach
                         val t = a.type ?: return@forEach
@@ -154,38 +170,40 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     }
                     Toast.makeText(ctx, if (google.isEmpty()) "No Google account to sync" else "Sync requested", Toast.LENGTH_SHORT).show()
                     vm.reload()
-                }) { Text("Sync now") }
+                })
+                InfoRow(Icons.Filled.Tune, "Account sync settings", onClick = { ctx.startActivity(Intent(Settings.ACTION_SYNC_SETTINGS)) })
             }
-            TextButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_SYNC_SETTINGS)) }, Modifier.padding(horizontal = 8.dp)) { Text("Open account sync settings") }
 
-            HorizontalDivider()
-            SectionTitle("Call recording")
-            SwitchRow("Record all calls automatically", autoRecord) { autoRecord = it; vm.prefs.autoRecord = it }
-            SwitchRow("Use speaker when only the microphone can be recorded", speakerRec) { speakerRec = it; vm.prefs.speakerForRecording = it }
+            SectionLabel("Call recording")
+            GroupCard {
+                InfoRow(Icons.Filled.Mic, "Record all calls", "Start recording as soon as a call connects",
+                    onClick = { autoRecord = !autoRecord; vm.prefs.autoRecord = autoRecord },
+                    trailing = { Switch(autoRecord, { autoRecord = it; vm.prefs.autoRecord = it }) })
+                InfoRow(Icons.Filled.VolumeUp, "Speaker fallback", "Use the speaker when only the microphone can be recorded",
+                    onClick = { speakerRec = !speakerRec; vm.prefs.speakerForRecording = speakerRec },
+                    trailing = { Switch(speakerRec, { speakerRec = it; vm.prefs.speakerForRecording = it }) })
+                InfoRow(Icons.Filled.LibraryMusic, "Recordings", onClick = { vm.push(Screen.Recordings) })
+            }
             Text(
-                "Most phones don't let apps capture the other person's voice directly, so the recording may only " +
-                    "contain your side plus whatever the speaker plays. Many places require everyone on the call to " +
-                    "agree to being recorded: tell them first.",
-                Modifier.padding(16.dp, 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Most phones don't let apps capture the other person's voice directly, so a recording may only hold your side " +
+                    "plus what the speaker plays. Many places require everyone on the call to agree to being recorded: tell them first.",
+                Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TextButton(onClick = { vm.push(Screen.Recordings) }, Modifier.padding(horizontal = 8.dp)) { Text("Open recordings") }
 
-            HorizontalDivider()
-            SectionTitle("Contacts")
-            TextButton(onClick = { vm.push(Screen.Merge) }, Modifier.padding(horizontal = 8.dp)) { Text("Merge duplicates") }
-            TextButton(onClick = { vm.push(Screen.Blocked) }, Modifier.padding(horizontal = 8.dp)) { Text("Blocked numbers") }
-            TextButton(onClick = { importLauncher.launch(arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*")) }, Modifier.padding(horizontal = 8.dp)) { Text("Import from .vcf file") }
-            TextButton(onClick = { exportLauncher.launch("contacts.vcf") }, Modifier.padding(horizontal = 8.dp)) { Text("Export all to .vcf file") }
-            Text("Version ${io.github.amandhakar.contacts.BuildConfig.VERSION_NAME} (experimental)", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SectionLabel("Contacts")
+            GroupCard {
+                InfoRow(Icons.Filled.MergeType, "Merge duplicates", onClick = { vm.push(Screen.Merge) })
+                InfoRow(Icons.Filled.Block, "Blocked numbers", onClick = { vm.push(Screen.Blocked) })
+                InfoRow(Icons.Filled.Download, "Import from .vcf file", onClick = { importLauncher.launch(arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*")) })
+                InfoRow(Icons.Filled.Upload, "Export all to .vcf file", onClick = { exportLauncher.launch("contacts.vcf") })
+            }
+            Text(
+                "Contacts ${io.github.amandhakar.contacts.BuildConfig.VERSION_NAME} · experimental",
+                Modifier.fillMaxWidth().padding(24.dp), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
         }
-    }
-}
-
-@Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(16.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f))
-        Switch(checked, onChange)
     }
 }
 

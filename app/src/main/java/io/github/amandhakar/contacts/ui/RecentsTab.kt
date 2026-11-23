@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.CallLog
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,12 +23,15 @@ import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,13 +97,19 @@ fun RecentsTab(vm: AppViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("All", "Missed", "Incoming", "Outgoing").forEachIndexed { i, t ->
-                FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(t) })
+        val options = listOf("All", "Missed", "Incoming", "Outgoing")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            options.forEachIndexed { i, t ->
+                SegmentedButton(
+                    selected = filter == i, onClick = { filter = i },
+                    shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                    label = { Text(t, maxLines = 1, style = MaterialTheme.typography.labelMedium) },
+                    icon = {},
+                )
             }
         }
         if (shown.isEmpty()) {
-            Text("No calls.", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EmptyState(Icons.Filled.History, "No calls", if (filter == 0) "Your calls will show up here." else "Nothing in this filter.")
             return@Column
         }
         val byDay = remember(shown) { shown.groupBy { dayLabel(it.date) } }
@@ -107,8 +117,8 @@ fun RecentsTab(vm: AppViewModel) {
             byDay.forEach { (day, list) ->
                 stickyHeader(key = "d$day") {
                     Text(
-                        day, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                        day, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 24.dp, top = 8.dp, bottom = 6.dp),
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 items(list, key = { it.id }) { e ->
@@ -133,7 +143,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
         else -> Icons.Filled.CallMissed
     }
     Row(Modifier.fillMaxWidth().clickable(enabled = e.number.isNotBlank(), onClick = onCall).padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(name, photo)
+        Avatar(name, photo, 48.dp)
         Column(Modifier.weight(1f).padding(start = 16.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface)
             Row(verticalAlignment = Alignment.CenterVertically) {
