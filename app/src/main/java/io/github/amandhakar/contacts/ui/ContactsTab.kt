@@ -57,6 +57,7 @@ import io.github.amandhakar.contacts.call.Dialer
 import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import io.github.amandhakar.contacts.Screen
+import io.github.amandhakar.contacts.data.SwipeAction
 import io.github.amandhakar.contacts.util.PhoneUtil
 import kotlinx.coroutines.launch
 
@@ -120,48 +121,76 @@ fun ContactsTab(vm: AppViewModel) {
                     items(list, key = { it.id }) { c ->
                         var menu by remember(c.id) { mutableStateOf(false) }
                         val number = phones[c.id]?.firstOrNull()?.number
-                        Box(Modifier.fillMaxWidth()) {
-                            Row(
-                                Modifier.fillMaxWidth().combinedClickable(
-                                    onClick = { vm.push(Screen.Detail(c.id)) },
-                                    onLongClick = { menu = true },
-                                ).padding(start = 16.dp, end = 36.dp, top = 8.dp, bottom = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Avatar(c.name, c.photoUri, 48.dp)
-                                Column(Modifier.padding(start = 16.dp)) {
-                                    Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    number?.let {
-                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        fun canPerform(action: SwipeAction): Boolean = when (action) {
+                            SwipeAction.NONE -> false
+                            SwipeAction.CALL, SwipeAction.MESSAGE, SwipeAction.WHATSAPP -> !number.isNullOrBlank()
+                            SwipeAction.VIEW_CONTACT, SwipeAction.FAVORITE -> true
+                        }
+                        fun perform(action: SwipeAction) {
+                            when (action) {
+                                SwipeAction.CALL -> if (!number.isNullOrBlank()) Dialer.call(context, number)
+                                SwipeAction.MESSAGE -> if (!number.isNullOrBlank()) {
+                                    try { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number"))) } catch (_: Exception) {}
+                                }
+                                SwipeAction.VIEW_CONTACT -> vm.push(Screen.Detail(c.id))
+                                SwipeAction.FAVORITE -> vm.setStarred(c.id, !c.starred)
+                                SwipeAction.WHATSAPP -> if (!number.isNullOrBlank()) {
+                                    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${PhoneUtil.digits(number)}"))) } catch (_: Exception) {}
+                                }
+                                SwipeAction.NONE -> Unit
+                            }
+                        }
+                        val leftAction = vm.swipeLeftAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+                        val rightAction = vm.swipeRightAction.takeIf { canPerform(it) } ?: SwipeAction.NONE
+                        SwipeActionRow(
+                            swipeLeft = leftAction,
+                            swipeRight = rightAction,
+                            onSwipeLeft = { perform(leftAction) },
+                            onSwipeRight = { perform(rightAction) },
+                        ) {
+                            Box(Modifier.fillMaxWidth()) {
+                                Row(
+                                    Modifier.fillMaxWidth().combinedClickable(
+                                        onClick = { vm.push(Screen.Detail(c.id)) },
+                                        onLongClick = { menu = true },
+                                    ).padding(start = 16.dp, end = 36.dp, top = 8.dp, bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Avatar(c.name, c.photoUri, 48.dp)
+                                    Column(Modifier.padding(start = 16.dp)) {
+                                        Text(c.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        number?.let {
+                                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                        }
                                     }
                                 }
-                            }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("View contact") },
-                                    onClick = { menu = false; vm.push(Screen.Detail(c.id)) },
-                                )
-                                if (!number.isNullOrBlank()) {
+                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                     DropdownMenuItem(
-                                        text = { Text("Call") },
-                                        onClick = { menu = false; Dialer.call(context, number) },
+                                        text = { Text("View contact") },
+                                        onClick = { menu = false; vm.push(Screen.Detail(c.id)) },
                                     )
+                                    if (!number.isNullOrBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text("Call") },
+                                            onClick = { menu = false; Dialer.call(context, number) },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Send message") },
+                                            onClick = {
+                                                menu = false
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "Unable to open messaging app", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
-                                        text = { Text("Send message") },
-                                        onClick = {
-                                            menu = false
-                                            try {
-                                                context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")))
-                                            } catch (_: Exception) {
-                                                Toast.makeText(context, "Unable to open messaging app", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
+                                        text = { Text("Edit contact") },
+                                        onClick = { menu = false; vm.push(Screen.Edit(c.id)) },
                                     )
                                 }
-                                DropdownMenuItem(
-                                    text = { Text("Edit contact") },
-                                    onClick = { menu = false; vm.push(Screen.Edit(c.id)) },
-                                )
                             }
                         }
                     }
