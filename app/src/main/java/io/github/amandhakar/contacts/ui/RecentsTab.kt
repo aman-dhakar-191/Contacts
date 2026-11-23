@@ -220,12 +220,10 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                         Toast.makeText(ctx, if (always) "Won't be recorded automatically" else "Calls with this number will be recorded", Toast.LENGTH_SHORT).show()
                     })
                     DropdownMenuItem(text = { Text("Flag as…") }, onClick = { menu = false; flagging = true })
-                    if (tag != null || vm.prefs.identifierOn) {
-                        DropdownMenuItem(
-                            text = { Text(if (tag != null) "This category is wrong…" else "Should be categorised…") },
-                            onClick = { menu = false; reporting = true },
-                        )
-                    }
+                    DropdownMenuItem(
+                        text = { Text(if (tag != null) "This category is wrong…" else "Should be categorised…") },
+                        onClick = { menu = false; reporting = true },
+                    )
                     DropdownMenuItem(text = { Text("Block number") }, onClick = {
                         menu = false
                         val ok = vm.blockedRepo.block(e.number)

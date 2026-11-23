@@ -97,6 +97,17 @@ fun CategoryChip(name: String, color: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/** A large solid label for the call screen, where the category has to be seen at a glance. */
+@Composable
+fun CategoryBadge(name: String, color: Int, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(24.dp), color = Color(color)) {
+        Text(
+            name, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = Color.White,
+            style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+        )
+    }
+}
+
 /** The Identifier section: master switch, rules, categories, manual flags and the processing log. */
 @Composable
 fun IdentifierScreen(vm: AppViewModel) {
@@ -123,15 +134,16 @@ fun IdentifierScreen(vm: AppViewModel) {
             GroupCard(Modifier.padding(top = 8.dp)) {
                 InfoRow(
                     Icons.Filled.Shield, "Identifier",
-                    if (on) "On · ${rules.count { it.enabled }} of ${rules.size} rules on · ${flags.size} flagged numbers" else "Off: nothing is categorised or logged",
-                    onClick = { on = !on; prefs.identifierOn = on; changed() },
-                    trailing = { Switch(on, { on = it; prefs.identifierOn = it; changed() }) },
+                    if (on) "Rules on · ${rules.count { it.enabled }} of ${rules.size} rules enabled · ${flags.size} flagged numbers" else "Rules off · your flagged numbers (${flags.size}) are still shown",
+                    onClick = { on = !on; prefs.identifierOn = on; prefs.identifierVersion = prefs.identifierVersion + 1; changed() },
+                    trailing = { Switch(on, { on = it; prefs.identifierOn = it; prefs.identifierVersion = prefs.identifierVersion + 1; changed() }) },
                 )
             }
             Text(
-                "Puts calls into categories such as Spam or Delivery, in the call history, on the call screen and in the incoming-call " +
-                    "notification. A number you flag by hand always wins; otherwise the first rule that matches decides. " +
-                    "Everything here stays on this phone.",
+                "Puts calls into categories such as Spam or Delivery. The category is shown in the headline of the incoming-call " +
+                    "notification, as a large label on the call screen, at the top of the app during a call, and in the call history. " +
+                    "A number you flag by hand always wins and is shown even when the rules are off; otherwise the first enabled rule " +
+                    "that matches decides. Everything here stays on this phone.",
                 Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -432,13 +444,11 @@ fun FlagDialog(vm: AppViewModel, number: String, name: String?, onDismiss: () ->
     val store = remember { Store.get(ctx) }
     val cats = remember { store.categories() }
     val current = remember { store.flagOf(number) }
-    val on = remember { Prefs(ctx).identifierOn }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Flag ${name ?: number}") },
         text = {
             Column {
-                if (!on) Text("The identifier is off, so flags are saved but not used until you turn it on (Settings → Identifier).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 if (cats.isEmpty()) Text("No categories yet.")
                 cats.forEach { c ->
                     Row(Modifier.fillMaxWidth().clickable {

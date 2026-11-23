@@ -110,7 +110,7 @@ fun CallScreen(onClose: () -> Unit) {
             Text(statusText(shown, primary == null, now), color = Color(0xFFB0B8C0), fontSize = 18.sp)
             shown.tag?.let { t ->
                 Spacer(Modifier.height(10.dp))
-                io.github.amandhakar.contacts.ui.CategoryChip(t.name, t.color, Modifier.clickable { reportWrong = true })
+                io.github.amandhakar.contacts.ui.CategoryBadge(t.name, t.color, Modifier.clickable { reportWrong = true })
                 Text(
                     (if (t.via == io.github.amandhakar.contacts.identifier.Via.MANUAL) "flagged by you" else "rule: ${t.ruleName ?: ""}") + " · tap if wrong",
                     color = Color(0xFF8A939B), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),

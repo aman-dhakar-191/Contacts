@@ -227,4 +227,12 @@ class IdentifierEngineTest {
         val row = LogRow(1, 0, Source.LIVE, "5551234", null, "IN", 0, null, Via.NONE, null, null, 3, listOf(TraceEntry("r", "off")), null)
         assertTrue(Export.log(listOf(row)).trim().lines()[1].contains("r: off"))
     }
+
+    @Test fun flagsApplyWhenThereAreNoRules() {
+        // the master switch hands the engine an empty rule list; a flag must still decide
+        val o = run(rec("9876543210"), emptyList(), flags = mapOf("9876543210" to spam.id))
+        assertEquals(Via.MANUAL, o.via)
+        assertEquals(spam, o.category)
+        assertNull(run(rec("9876543210"), emptyList()).category)
+    }
 }
