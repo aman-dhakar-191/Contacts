@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Contacts</string>
+    <string name="a11y_helper_description">Optional helper for the call recording test. It does not read the screen or do anything else.</string>
 </resources>
