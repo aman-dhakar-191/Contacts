@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.data.RecSource
 import io.github.amandhakar.contacts.util.AudioStats
+import io.github.amandhakar.contacts.util.Telemetry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -76,6 +77,8 @@ object RecordingProbe {
                     _results.value = out.toList()
                 }
                 Prefs(app).lastProbe = toJson(out)
+                Telemetry.event("recording_test", *out.map { it.source.name to it.status.name }.toTypedArray(),
+                    "a11y" to AccessibilityHelper.isEnabled(app), "far_side" to out.any { it.source.capturesFarSide && it.status == ProbeStatus.SIGNAL })
             } finally {
                 _step.value = null
                 _running.value = false

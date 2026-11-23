@@ -7,6 +7,7 @@ import android.telecom.DisconnectCause
 import android.telecom.InCallService
 import io.github.amandhakar.contacts.data.ContactsRepo
 import io.github.amandhakar.contacts.data.RecordRules
+import io.github.amandhakar.contacts.util.Telemetry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,7 @@ class CallService : InCallService() {
         call.registerCallback(cb)
         callbacks[call] = cb
         CallHub.add(call)
+        Telemetry.event("call_added", "incoming" to (call.details.callDirection == Call.Details.DIRECTION_INCOMING))
 
         val number = call.details.handle?.schemeSpecificPart ?: ""
         scope.launch { CallHub.setCaller(call, ContactsRepo(applicationContext).lookup(number)) }
@@ -61,6 +63,7 @@ class CallService : InCallService() {
 
         val cause = call.details.disconnectCause?.code
         if (info != null && info.incoming && !wasAnswered && cause == DisconnectCause.MISSED) {
+            Telemetry.event("call_missed")
             Notifications.missed(this, info.number, info.name)
         }
         if (CallHub.calls.value.isEmpty()) {
@@ -95,7 +98,8 @@ class CallService : InCallService() {
     private fun openCallScreen() {
         try {
             startActivity(Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Telemetry.nonFatal("openCallScreen", e)
         }
     }
 }

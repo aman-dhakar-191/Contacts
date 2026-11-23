@@ -26,7 +26,8 @@ object Dialer {
             val extras = Bundle()
             if (handle != null) extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
             ctx.getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), extras)
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            io.github.amandhakar.contacts.util.Telemetry.event("call_blocked_no_permission")
             Toast.makeText(ctx, "Allow the Phone permission first", Toast.LENGTH_SHORT).show()
         }
     }

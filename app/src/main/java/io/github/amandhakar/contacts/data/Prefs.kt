@@ -29,6 +29,11 @@ class Prefs(ctx: Context) {
         get() = sp.getString("default_account", null)
         set(v) = sp.edit().putString("default_account", v).apply()
 
+    /** Send crash reports and anonymous usage to Firebase. On by default; the switch is in Settings. */
+    var telemetry: Boolean
+        get() = sp.getBoolean("telemetry", true)
+        set(v) = sp.edit().putBoolean("telemetry", v).apply()
+
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
     var speakerForRecording: Boolean
         get() = sp.getBoolean("speaker_for_recording", true)

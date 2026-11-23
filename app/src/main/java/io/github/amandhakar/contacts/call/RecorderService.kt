@@ -14,6 +14,7 @@ import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.data.RecSource
 import io.github.amandhakar.contacts.data.RecordingsRepo
 import io.github.amandhakar.contacts.util.AudioStats
+import io.github.amandhakar.contacts.util.Telemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
 
@@ -54,7 +55,9 @@ class RecorderService : Service() {
             if (elapsedMs >= CHECK_AFTER_MS && AudioStats.isSilent(peak) && queue.isNotEmpty()) {
                 val bad = current
                 discardCurrent()
-                if (startNext()) RecorderState.warning.value = "${bad?.label ?: "That input"} was silent, switched to ${current?.label}."
+                val started = startNext()
+                Telemetry.event("recording_silent_switch", "from" to bad?.name, "to" to (if (started) current?.name else "none"))
+                if (started) RecorderState.warning.value = "${bad?.label ?: "That input"} was silent, switched to ${current?.label}."
                 else {
                     RecorderState.warning.value = "No input captured sound. Run the recording test in Settings."
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -95,6 +98,7 @@ class RecorderService : Service() {
         }
         queue.clear(); queue.addAll(RecSource.chain(Prefs(this).preferredSource))
         if (!startNext()) {
+            Telemetry.event("recording_failed", "reason" to "no_input_opened")
             RecorderState.error.value = "This phone doesn't allow recording calls."
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -124,6 +128,10 @@ class RecorderService : Service() {
                 continue
             }
             recorder = r; file = f; current = src
+            Telemetry.event(
+                "recording_started", "source" to src.name, "both_sides" to (src == RecSource.VOICE_CALL),
+                "auto_reason" to (RecorderState.reason.value ?: "manual"),
+            )
             peak = 0; elapsedMs = 0
             RecorderState.bothSides.value = src == RecSource.VOICE_CALL
             RecorderState.sourceLabel.value = src.label
@@ -159,6 +167,7 @@ class RecorderService : Service() {
         stopRecorder()
         if (f != null && (f.length() < 2_000 || wasSilent)) {
             f.delete()
+            if (wasSilent) Telemetry.event("recording_discarded_silent", "source" to current?.name)
             if (wasSilent) RecorderState.warning.value = "The recording was silent and was discarded. Run the recording test in Settings."
         }
         file = null; current = null

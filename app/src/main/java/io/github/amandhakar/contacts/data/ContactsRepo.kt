@@ -264,7 +264,8 @@ class ContactsRepo(private val ctx: Context) {
         return try {
             cr.applyBatch(ContactsContract.AUTHORITY, ops)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            io.github.amandhakar.contacts.util.Telemetry.nonFatal("save_contact", e)
             false
         }
     }

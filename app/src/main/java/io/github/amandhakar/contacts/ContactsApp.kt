@@ -7,5 +7,6 @@ class ContactsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        io.github.amandhakar.contacts.util.Telemetry.init(this)
     }
 }
