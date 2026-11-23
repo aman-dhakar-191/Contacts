@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -109,8 +110,33 @@ object Notifications {
             .addAction(0, if (muted) "Unmute" else "Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
             .addAction(0, "End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
         if (live) b.setUsesChronometer(true).setWhen(info.connectTimeMillis).setShowWhen(true) else b.setShowWhen(false)
+        // Android 16 "live update": asks the system to show this as a status-bar chip / island with the call timer.
+        // Ignored on older Android, and when the user turned live updates off for the app.
+        b.addExtras(Bundle().apply {
+            putBoolean("android.requestPromotedOngoing", true)
+            if (!live) putString("android.shortCriticalText", if (info.state == android.telecom.Call.STATE_HOLDING) "On hold" else "Calling")
+        })
         NotificationManagerCompat.from(ctx).notify(ID_ONGOING, b.build())
     }
+
+    /** Whether Android 16 live updates (the chip / island) are allowed for this app, and whether the current call got one. */
+    fun liveUpdateStatus(ctx: Context): String {
+        if (android.os.Build.VERSION.SDK_INT < 36) return "Needs Android 16 (this phone has Android ${android.os.Build.VERSION.RELEASE})"
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        val allowed = try { nm.javaClass.getMethod("canPostPromotedNotifications").invoke(nm) as? Boolean } catch (_: Throwable) { null }
+        val promoted = try {
+            nm.activeNotifications.any { it.id == ID_ONGOING && (it.notification.flags and FLAG_PROMOTED_ONGOING) != 0 }
+        } catch (_: Throwable) { false }
+        return when {
+            allowed == false -> "Off for this app. Turn it on in Android settings."
+            promoted -> "On: the current call is shown as a live update."
+            allowed == true -> "Allowed. Shown while a call is on."
+            else -> "Unknown on this phone."
+        }
+    }
+
+    /** Hidden platform flag that Android 16 sets on a notification it has promoted to a live update. */
+    private const val FLAG_PROMOTED_ONGOING = 0x00040000
 
     fun cancelIncoming(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_INCOMING)
     fun cancelOngoing(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_ONGOING)

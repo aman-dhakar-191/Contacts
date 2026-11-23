@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -136,23 +137,26 @@ fun CallScreen(onClose: () -> Unit) {
                 val muted = audio?.isMuted == true
                 val speaker = audio?.route == CallAudioState.ROUTE_SPEAKER
                 val held = primary.state == Call.STATE_HOLDING
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted) { CallHub.setMuted(!muted) }
-                    ToggleButton(Icons.Filled.Dialpad, "Keypad", false) { showKeypad = true }
-                    ToggleButton(Icons.Filled.VolumeUp, "Speaker", speaker) { CallHub.setSpeaker(!speaker) }
+                // Both rows use three equal columns (an empty cell where a button is missing) so the buttons line up.
+                Row(Modifier.fillMaxWidth()) {
+                    Cell { ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted) { CallHub.setMuted(!muted) } }
+                    Cell { ToggleButton(Icons.Filled.Dialpad, "Keypad", false) { showKeypad = true } }
+                    Cell { ToggleButton(Icons.Filled.VolumeUp, "Speaker", speaker) { CallHub.setSpeaker(!speaker) } }
                 }
                 Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    ToggleButton(Icons.Filled.Pause, "Hold", held) { if (held) CallHub.unhold(primary.call) else CallHub.hold(primary.call) }
-                    ToggleButton(Icons.Filled.FiberManualRecord, "Record", recording) {
-                        if (recording) RecorderService.stop(ctx) else { RecorderState.reason.value = null; RecorderService.start(ctx, primary.number, primary.incoming) }
-                    }
-                    if (other != null) {
-                        ToggleButton(Icons.Filled.SwapCalls, "Swap", false) {
-                            if (other.state == Call.STATE_HOLDING) CallHub.unhold(other.call) else CallHub.hold(primary.call)
+                Row(Modifier.fillMaxWidth()) {
+                    Cell { ToggleButton(Icons.Filled.Pause, "Hold", held) { if (held) CallHub.unhold(primary.call) else CallHub.hold(primary.call) } }
+                    Cell {
+                        ToggleButton(Icons.Filled.FiberManualRecord, "Record", recording) {
+                            if (recording) RecorderService.stop(ctx) else { RecorderState.reason.value = null; RecorderService.start(ctx, primary.number, primary.incoming) }
                         }
-                    } else {
-                        Spacer(Modifier.size(64.dp))
+                    }
+                    Cell {
+                        if (other != null) {
+                            ToggleButton(Icons.Filled.SwapCalls, "Swap", false) {
+                                if (other.state == Call.STATE_HOLDING) CallHub.unhold(other.call) else CallHub.hold(primary.call)
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(32.dp))
@@ -228,6 +232,12 @@ private fun RoundButton(icon: ImageVector, label: String, color: Color, size: an
         Spacer(Modifier.height(6.dp))
         Text(label, color = Color(0xFFB0B8C0), fontSize = 13.sp)
     }
+}
+
+/** One equal-width column of a control row. */
+@Composable
+private fun RowScope.Cell(content: @Composable () -> Unit) {
+    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
 }
 
 @Composable
