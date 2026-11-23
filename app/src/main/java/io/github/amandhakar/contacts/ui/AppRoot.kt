@@ -66,6 +66,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
         Screen.Identifier -> "identifier"
         is Screen.IdentifierRule -> "identifier_rule"
         Screen.IdentifierLog -> "identifier_log"
+        Screen.IdentifierCorrections -> "identifier_corrections"
     }
     androidx.compose.runtime.LaunchedEffect(screenName) { io.github.amandhakar.contacts.util.Telemetry.screen(screenName) }
     val calls by io.github.amandhakar.contacts.call.CallHub.calls.collectAsState()
@@ -97,6 +98,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
                     Screen.Identifier -> IdentifierScreen(vm)
                     is Screen.IdentifierRule -> RuleEditScreen(vm, top.id)
                     Screen.IdentifierLog -> IdentifierLogScreen(vm)
+                    Screen.IdentifierCorrections -> CorrectionsScreen(vm)
                 }
             }
         }

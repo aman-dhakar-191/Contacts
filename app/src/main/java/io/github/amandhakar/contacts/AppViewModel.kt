@@ -48,6 +48,7 @@ sealed interface Screen {
     data object Identifier : Screen
     data class IdentifierRule(val id: Long) : Screen
     data object IdentifierLog : Screen
+    data object IdentifierCorrections : Screen
 }
 
 val REQUIRED_PERMISSIONS = arrayOf(

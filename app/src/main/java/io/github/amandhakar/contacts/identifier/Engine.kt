@@ -8,6 +8,11 @@ import java.util.Calendar
  * first rule whose conditions all match wins). Pure code: no Android, so it is unit tested.
  */
 object Engine {
+    /** Category id of a flag meaning "never categorise this number". */
+    const val EXEMPT = 0L
+
+    private const val ALL_TIME = Long.MAX_VALUE / 4
+
     sealed interface R {
         data object Match : R
         data class No(val why: String) : R
@@ -17,6 +22,9 @@ object Engine {
     fun classify(rec: CallRecord, rules: List<Rule>, categories: Map<Long, Category>, flags: Map<String, Long>, env: Env): Outcome {
         val key = PhoneUtil.key(rec.number)
         if (key.isNotEmpty()) {
+            if (flags[key] == EXEMPT) {
+                return Outcome(Via.MANUAL, null, null, listOf(TraceEntry("Manual flag", "this number is flagged as never categorised")))
+            }
             val flagged = flags[key]?.let { categories[it] }
             if (flagged != null) {
                 return Outcome(Via.MANUAL, flagged, null, listOf(TraceEntry("Manual flag", "this number is flagged as ${flagged.name}")))
@@ -66,6 +74,10 @@ object Engine {
         CondType.DIRECTION -> if (directionOf(c.param) == null) "use incoming, outgoing, missed, declined or blocked" else null
         CondType.REPEAT -> if (parseRepeat(c.param) == null) "use count/hours, e.g. 3/24" else null
         CondType.TIME_RANGE -> if (parseTimeRange(c.param) == null) "use HH:MM-HH:MM, e.g. 22:00-07:00" else null
+        CondType.ANSWERED, CondType.DECLINED, CondType.MISSED, CondType.CALLED_BY_ME ->
+            if (parseCountWindow(c.param) == null) "use a count, or count/days, e.g. 3/30" else null
+        CondType.ACCEPT_RATE_BELOW, CondType.ACCEPT_RATE_ABOVE ->
+            if (parseRate(c.param) == null) "use percent/minimum calls, e.g. 20/5 (optionally /days)" else null
         CondType.HIDDEN, CondType.UNKNOWN, CondType.KNOWN -> null
     }
 
@@ -114,6 +126,33 @@ object Engine {
                     if (count >= need) R.Match else R.No("$count call(s) in $hours h")
                 }
             }
+            CondType.ANSWERED, CondType.DECLINED, CondType.MISSED, CondType.CALLED_BY_ME -> {
+                val (need, days) = parseCountWindow(c.param)!!
+                if (n.isEmpty()) R.No("number is hidden")
+                else {
+                    val st = env.stats(rec.number, rec.timeMs, windowMs(days))
+                    val count = when (c.type) {
+                        CondType.ANSWERED -> st.answered
+                        CondType.DECLINED -> st.declined + st.blocked
+                        CondType.MISSED -> st.missed
+                        else -> st.outgoing
+                    }
+                    if (count >= need) R.Match else R.No("$count ${if (days == 0) "ever" else "in $days days"}")
+                }
+            }
+            CondType.ACCEPT_RATE_BELOW, CondType.ACCEPT_RATE_ABOVE -> {
+                val (percent, minCalls, days) = parseRate(c.param)!!
+                if (n.isEmpty()) R.No("number is hidden")
+                else {
+                    val st = env.stats(rec.number, rec.timeMs, windowMs(days))
+                    if (st.offered < minCalls) R.No("only ${st.offered} call(s) rang you, need $minCalls")
+                    else {
+                        val rate = st.answered * 100.0 / st.offered
+                        val ok = if (c.type == CondType.ACCEPT_RATE_BELOW) rate < percent else rate >= percent
+                        if (ok) R.Match else R.No("you answered ${"%.0f".format(rate)}% of ${st.offered}")
+                    }
+                }
+            }
             CondType.TIME_RANGE -> {
                 val (from, to) = parseTimeRange(c.param)!!
                 val m = minuteOfDay(rec.timeMs)
@@ -121,6 +160,27 @@ object Engine {
                 if (inside) R.Match else R.No("call time ${"%02d:%02d".format(m / 60, m % 60)}")
             }
         }
+    }
+
+    private fun windowMs(days: Int): Long = if (days <= 0) ALL_TIME else days * 86_400_000L
+
+    /** "3" -> 3 calls ever; "3/30" -> 3 calls within 30 days. */
+    fun parseCountWindow(s: String): Pair<Int, Int>? {
+        val p = s.split('/')
+        if (p.size !in 1..2) return null
+        val n = p[0].trim().toIntOrNull() ?: return null
+        val d = if (p.size == 2) (p[1].trim().toIntOrNull() ?: return null) else 0
+        return if (n >= 1 && d >= 0) n to d else null
+    }
+
+    /** "20/5" -> 20 percent, at least 5 calls; "20/5/30" also limits to the last 30 days. Returns (percent, minCalls, days). */
+    fun parseRate(s: String): Triple<Int, Int, Int>? {
+        val p = s.split('/')
+        if (p.size !in 2..3) return null
+        val percent = p[0].trim().toIntOrNull() ?: return null
+        val min = p[1].trim().toIntOrNull() ?: return null
+        val d = if (p.size == 3) (p[2].trim().toIntOrNull() ?: return null) else 0
+        return if (percent in 0..100 && min >= 1 && d >= 0) Triple(percent, min, d) else null
     }
 
     fun directionOf(s: String): Direction? = when (s.trim().lowercase()) {

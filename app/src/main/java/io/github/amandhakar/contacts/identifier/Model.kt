@@ -14,6 +14,14 @@ enum class CondType(val label: String, val hint: String, val needsParam: Boolean
     SHORT_CALL("Answered call lasted at most N seconds", "e.g. 5", true),
     REPEAT("Called N or more times within H hours", "N/H, e.g. 3/24", true),
     TIME_RANGE("Call time is between", "HH:MM-HH:MM, e.g. 22:00-07:00", true),
+
+    // What you did with this number's calls before. Uses your call history; "N/D" limits it to the last D days.
+    ANSWERED("I answered N or more of its calls", "N or N/days, e.g. 3 or 3/30", true),
+    DECLINED("I declined or blocked N or more of its calls", "N or N/days, e.g. 2/30", true),
+    MISSED("I missed N or more of its calls", "N or N/days, e.g. 5/7", true),
+    CALLED_BY_ME("I called this number N or more times", "N or N/days, e.g. 1", true),
+    ACCEPT_RATE_BELOW("I answered less than P% of its calls", "P/M or P/M/days: percent, at least M calls, e.g. 20/5", true),
+    ACCEPT_RATE_ABOVE("I answered at least P% of its calls", "P/M or P/M/days, e.g. 80/5", true),
 }
 
 data class Condition(val type: CondType, val param: String = "") {
@@ -30,6 +38,12 @@ data class Condition(val type: CondType, val param: String = "") {
         CondType.SHORT_CALL -> "answered, at most $param s"
         CondType.REPEAT -> "$param calls (count/hours)"
         CondType.TIME_RANGE -> "between $param"
+        CondType.ANSWERED -> "I answered ≥ $param"
+        CondType.DECLINED -> "I declined/blocked ≥ $param"
+        CondType.MISSED -> "I missed ≥ $param"
+        CondType.CALLED_BY_ME -> "I called it ≥ $param"
+        CondType.ACCEPT_RATE_BELOW -> "answered < $param (% / min calls)"
+        CondType.ACCEPT_RATE_ABOVE -> "answered ≥ $param (% / min calls)"
     }
 }
 
@@ -75,13 +89,43 @@ data class Outcome(
     val ruleErrors: List<Pair<Long, String>> = emptyList(),
 )
 
+/** What you did with a number's calls in some period, from the call log. */
+data class ActionStats(
+    val answered: Int = 0,
+    val outgoing: Int = 0,
+    val missed: Int = 0,
+    val declined: Int = 0,
+    val blocked: Int = 0,
+) {
+    /** Calls that rang you: answered + missed + declined + blocked. */
+    val offered get() = answered + missed + declined + blocked
+    val total get() = offered + outgoing
+}
+
+/** A call the identifier got wrong, as reported by the user. Kept so rules can be fixed from the data. */
+data class Correction(
+    val id: Long,
+    val ts: Long,
+    val number: String,
+    val name: String?,
+    val wasCategory: String?,
+    val wasVia: Via,
+    val wasRuleId: Long?,
+    val wasRuleName: String?,
+    /** What it should have been; null = no category. */
+    val shouldCategory: String?,
+    val note: String,
+)
+
 /** What the engine needs to know about the outside world. */
 interface Env {
     fun isKnown(number: String): Boolean
     fun labelsOf(number: String): Set<String>
     fun contactName(number: String): String?
-    /** Calls from this number at or before [untilMs] and within [windowMs] of it, from the call log. */
-    fun callsFrom(number: String, untilMs: Long, windowMs: Long): Int
+    /** What you did with this number's calls at or before [untilMs] and within [windowMs] of it, from the call log. */
+    fun stats(number: String, untilMs: Long, windowMs: Long): ActionStats
+
+    fun callsFrom(number: String, untilMs: Long, windowMs: Long): Int = stats(number, untilMs, windowMs).total
 }
 
 /** Conditions are stored as lines "TYPE<TAB>param". */

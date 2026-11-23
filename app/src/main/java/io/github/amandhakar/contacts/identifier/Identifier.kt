@@ -8,10 +8,13 @@ import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.util.PhoneUtil
 
 /** What the UI shows for a categorised call. */
-data class Tag(val name: String, val color: Int, val via: Via, val ruleName: String?)
+data class Tag(val name: String, val color: Int, val via: Via, val ruleName: String?, val ruleId: Long? = null)
 
 /** Runs the engine for live calls and for the call log, and writes the processing log. */
 object Identifier {
+    /** How many call-log rows the frequency and acceptance conditions can look back over. */
+    const val STATS_ROWS = 2000
+
     fun isOn(ctx: Context) = Prefs(ctx).identifierOn
 
     fun directionOf(logType: Int): Direction = when (logType) {
@@ -42,14 +45,25 @@ object Identifier {
             return labels.getOrPut(id) { repo.detail(id)?.groupIds?.mapNotNull { groupTitles[it] }?.toSet() ?: emptySet() }
         }
 
-        override fun callsFrom(number: String, untilMs: Long, windowMs: Long): Int {
+        override fun stats(number: String, untilMs: Long, windowMs: Long): ActionStats {
             val key = PhoneUtil.key(number)
-            if (key.isEmpty()) return 0
-            return history.count { PhoneUtil.key(it.number) == key && it.date <= untilMs && it.date > untilMs - windowMs }
+            if (key.isEmpty()) return ActionStats()
+            var answered = 0; var outgoing = 0; var missed = 0; var declined = 0; var blocked = 0
+            for (e in history) {
+                if (e.date > untilMs || e.date <= untilMs - windowMs || PhoneUtil.key(e.number) != key) continue
+                when (e.type) {
+                    CallLog.Calls.INCOMING_TYPE -> answered++
+                    CallLog.Calls.OUTGOING_TYPE -> outgoing++
+                    CallLog.Calls.MISSED_TYPE -> missed++
+                    CallLog.Calls.REJECTED_TYPE -> declined++
+                    CallLog.Calls.BLOCKED_TYPE -> blocked++
+                }
+            }
+            return ActionStats(answered, outgoing, missed, declined, blocked)
         }
     }
 
-    private fun tagOf(o: Outcome): Tag? = o.category?.let { Tag(it.name, it.color, o.via, o.rule?.name) }
+    private fun tagOf(o: Outcome): Tag? = o.category?.let { Tag(it.name, it.color, o.via, o.rule?.name, o.rule?.id) }
 
     /** Classifies a ringing or placed call and logs it. Returns null when the master switch is off. */
     fun classifyLive(ctx: Context, number: String, nameHint: String?, incoming: Boolean): Tag? {
@@ -61,7 +75,7 @@ object Identifier {
         var outcome: Outcome? = null
         var failure: String? = null
         try {
-            val env = AppEnv(ctx, io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(500))
+            val env = AppEnv(ctx, io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS))
             outcome = Engine.classify(rec, store.rules(), store.categories().associateBy { it.id }, store.flags(), env)
         } catch (e: Exception) {
             failure = "${e.javaClass.simpleName}: ${e.message}"
@@ -92,12 +106,13 @@ object Identifier {
         val cached = store.results(version)
         val ruleById = rules.associateBy { it.id }
         val out = HashMap<Long, Tag>()
-        val env = AppEnv(ctx, history)
+        // Frequency / acceptance rules look at more history than the list on screen shows.
+        val env = AppEnv(ctx, io.github.amandhakar.contacts.data.CallLogRepo(ctx).load(STATS_ROWS))
         val broken = LinkedHashMap<Long, String>()
 
         fun fromCache(r: StoredResult): Tag? {
             val cat = r.categoryId?.let { categories[it] } ?: return null
-            return Tag(cat.name, cat.color, r.via, r.ruleId?.let { ruleById[it]?.name })
+            return Tag(cat.name, cat.color, r.via, r.ruleId?.let { ruleById[it]?.name }, r.ruleId)
         }
 
         try {

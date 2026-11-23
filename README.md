@@ -55,6 +55,13 @@ Settings → **Call identifier** puts calls into categories (Spam, Delivery, …
   is hidden, in contacts or not, has a label, name contains, call type, answered call shorter than N seconds, N calls within H hours,
   time of day. Rules are checked top to bottom and the first match wins.
 - A **manual flag** (long-press a call in Recents, or a contact's number menu → *Flag as…*) always wins over the rules.
+- **What you did with a number's calls** can be a condition too: answered N or more of its calls, declined/blocked N or more, missed N or more,
+  you called it N or more times, or you answered less (or at least) P% of its calls over at least M calls. Add `/days` to look at
+  only the last D days. It uses the last 2,000 calls in the call log.
+- **Reporting a wrong category**: "This is wrong…" in the processing log, "This category is wrong…" in a call's menu in Recents, or tap
+  the category on the call screen. It records which rule was wrong for which number and what it should have been, and can flag the number
+  so it is right at once ("No category" = never label this number). Rules show how many numbers were reported wrong; the *Reported wrong*
+  screen groups the reports by rule and exports them, and the processing log, as CSV.
 - Where it shows: the call history, the call screen and the incoming-call notification.
 - **Processing log**: every record processed (live calls and call-history rows) with the outcome and the rules tried, kept on the
   phone only (latest 2,000). Nothing from the identifier is sent to Firebase.
