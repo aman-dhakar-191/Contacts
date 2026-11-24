@@ -266,6 +266,21 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     onClick = { vm.updateBluetoothNames(!vm.bluetoothNames) },
                     trailing = { Switch(vm.bluetoothNames, { vm.updateBluetoothNames(it) }) },
                 )
+                var rememberNames by remember { mutableStateOf(vm.prefs.rememberCallerNames) }
+                var rememberedCount by remember { mutableStateOf(io.github.amandhakar.contacts.data.CallerNames(ctx).count()) }
+                InfoRow(
+                    Icons.Filled.Science, "Remember caller names",
+                    if (rememberNames) "On · keeps the name Android shows for unknown callers ($rememberedCount saved) and uses it on later calls and in Recents. Stays on this phone, never added to contacts."
+                    else "Off · unknown numbers show just the number",
+                    onClick = { rememberNames = !rememberNames; vm.prefs.rememberCallerNames = rememberNames },
+                    trailing = { Switch(rememberNames, { rememberNames = it; vm.prefs.rememberCallerNames = it }) },
+                )
+                if (rememberedCount > 0) {
+                    InfoRow(Icons.Filled.Science, "Clear remembered names", "Forget the $rememberedCount names kept so far", onClick = {
+                        io.github.amandhakar.contacts.data.CallerNames(ctx).clear(); rememberedCount = 0
+                        Toast.makeText(ctx, "Remembered names cleared", Toast.LENGTH_SHORT).show()
+                    })
+                }
                 if (vm.bluetoothNames && !vm.btGranted) {
                     InfoRow(Icons.Filled.Security, "Allow Bluetooth permission", "Lets the app read the name of the connected device", onClick = requestPermissions)
                 }

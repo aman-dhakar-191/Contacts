@@ -34,12 +34,16 @@ class CallService : InCallService() {
     override fun onCreate() {
         super.onCreate()
         CallHub.service = this
+        val names = io.github.amandhakar.contacts.data.CallerNames(applicationContext)
+        val prefs = io.github.amandhakar.contacts.data.Prefs(applicationContext)
+        CallHub.rememberedName = { n -> if (prefs.rememberCallerNames) names.get(n) else null }
         ui.postDelayed(clock, 1000)
     }
 
     override fun onDestroy() {
         ui.removeCallbacks(clock)
         CallHub.service = null
+        CallHub.rememberedName = null
         scope.cancel()
         super.onDestroy()
     }
@@ -48,13 +52,14 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         val cb = object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) = handleState(call, state)
-            override fun onDetailsChanged(call: Call, details: Call.Details) { CallHub.refresh(); updateNotifications() }
+            override fun onDetailsChanged(call: Call, details: Call.Details) { rememberCallerName(call); CallHub.refresh(); updateNotifications() }
         }
         call.registerCallback(cb)
         callbacks[call] = cb
         CallHub.add(call)
         Telemetry.event("call_added", "incoming" to (call.details.callDirection == Call.Details.DIRECTION_INCOMING))
 
+        rememberCallerName(call)
         val number = call.details.handle?.schemeSpecificPart ?: ""
         val incomingCall = call.details.callDirection == Call.Details.DIRECTION_INCOMING
         scope.launch {
@@ -69,6 +74,19 @@ class CallService : InCallService() {
 
         updateNotifications()
         if (call.state != Call.STATE_RINGING) openCallScreen()
+    }
+
+    /** Keeps the caller-ID name Android gives for a number that is not in the contacts, for later calls. Never saved to contacts. */
+    @Suppress("DEPRECATION")
+    private fun rememberCallerName(call: Call) {
+        val number = call.details.handle?.schemeSpecificPart ?: return
+        val name = call.details.callerDisplayName?.takeIf { it.isNotBlank() } ?: return
+        if (!io.github.amandhakar.contacts.data.Prefs(applicationContext).rememberCallerNames) return
+        scope.launch {
+            if (ContactsRepo(applicationContext).lookup(number) == null) {
+                io.github.amandhakar.contacts.data.CallerNames(applicationContext).put(number, name)
+            }
+        }
     }
 
     override fun onCallRemoved(call: Call) {
