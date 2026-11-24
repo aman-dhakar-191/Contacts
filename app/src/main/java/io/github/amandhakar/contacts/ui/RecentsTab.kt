@@ -126,7 +126,7 @@ fun RecentsTab(vm: AppViewModel) {
                 items(list, key = { it.id }) { e ->
                     val contact = index[PhoneUtil.key(e.number)]
                     val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() } ?: e.number.ifBlank { "Unknown" }
-                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id], onCall = { Dialer.call(ctx, e.number) })
+                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id])
                 }
             }
         }
@@ -134,7 +134,7 @@ fun RecentsTab(vm: AppViewModel) {
 }
 
 @Composable
-private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, tag: io.github.amandhakar.contacts.identifier.Tag?, onCall: () -> Unit) {
+private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, tag: io.github.amandhakar.contacts.identifier.Tag?) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var flagging by remember { mutableStateOf(false) }
@@ -178,7 +178,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
         Box(Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth().combinedClickable(
-                    onClick = { if (e.number.isNotBlank()) onCall() },
+                    onClick = {},   // a tap no longer places a call; use the swipe action or the long-press menu
                     onLongClick = { menu = true },
                 ).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
