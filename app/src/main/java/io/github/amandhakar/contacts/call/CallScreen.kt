@@ -17,6 +17,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -144,8 +157,8 @@ fun CallScreen(onClose: () -> Unit) {
 
             if (primary != null && primary.state == Call.STATE_RINGING) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 48.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    RoundButton(Icons.Filled.CallEnd, "Decline", Color(0xFFD32F2F), size = 72.dp) { CallHub.reject(primary.call) }
-                    RoundButton(Icons.Filled.Call, "Answer", Color(0xFF2E7D32), size = 72.dp) { CallHub.answer(primary.call) }
+                    SwipeCallButton(Icons.Filled.CallEnd, "Decline", "Swipe down", Color(0xFFD32F2F), SwipeDir.DOWN) { CallHub.reject(primary.call) }
+                    SwipeCallButton(Icons.Filled.Call, "Answer", "Swipe up", Color(0xFF2E7D32), SwipeDir.UP) { CallHub.answer(primary.call) }
                 }
             } else if (primary != null) {
                 val muted = audio?.isMuted == true
@@ -174,7 +187,7 @@ fun CallScreen(onClose: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(32.dp))
-                RoundButton(Icons.Filled.CallEnd, "End call", Color(0xFFD32F2F), size = 72.dp) { CallHub.hangUp(primary.call) }
+                SwipeCallButton(Icons.Filled.CallEnd, "End call", "Tap or swipe", Color(0xFFD32F2F), SwipeDir.EITHER) { CallHub.hangUp(primary.call) }
                 Spacer(Modifier.height(32.dp))
             } else {
                 Spacer(Modifier.height(100.dp))
@@ -237,17 +250,6 @@ private fun statusText(info: CallInfo, ended: Boolean, now: Long): String {
     }
 }
 
-@Composable
-private fun RoundButton(icon: ImageVector, label: String, color: Color, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(size).clip(CircleShape).background(color).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-            Icon(icon, label, tint = Color.White, modifier = Modifier.size(size * 0.45f))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(label, color = Color(0xFFB0B8C0), fontSize = 13.sp)
-    }
-}
-
 /** One equal-width column of a control row. */
 @Composable
 private fun RowScope.Cell(content: @Composable () -> Unit) {
@@ -263,5 +265,51 @@ private fun ToggleButton(icon: ImageVector, label: String, on: Boolean, onClick:
         ) { Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(28.dp)) }
         Spacer(Modifier.height(4.dp))
         Text(label, color = Color(0xFFB0B8C0), fontSize = 12.sp)
+    }
+}
+
+private enum class SwipeDir { UP, DOWN, EITHER }
+
+/**
+ * A round call button you can tap or drag vertically. Dragging past the threshold in the allowed
+ * direction fires the action (with a tick); letting go earlier slides the button back.
+ */
+@Composable
+private fun SwipeCallButton(icon: ImageVector, label: String, hint: String, color: Color, dir: SwipeDir, onFire: () -> Unit) {
+    val size = 72.dp
+    val maxPx = with(LocalDensity.current) { 110.dp.toPx() }
+    val thresholdPx = maxPx * 0.6f
+    var dy by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val fire by rememberUpdatedState(onFire)
+    val lo = if (dir == SwipeDir.DOWN) 0f else -maxPx
+    val hi = if (dir == SwipeDir.UP) 0f else maxPx
+    val armed = abs(dy) >= thresholdPx
+    LaunchedEffect(armed) { if (armed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.offset { IntOffset(0, dy.roundToInt()) }
+                .size(size).clip(CircleShape)
+                .background(if (armed) color.copy(alpha = 1f) else color.copy(alpha = 0.9f))
+                .clickable { fire() }
+                .pointerInput(dir) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            val end = dy
+                            scope.launch { animate(end, 0f, animationSpec = tween(160)) { v, _ -> dy = v } }
+                            if (abs(end) >= thresholdPx) fire()
+                        },
+                        onDragCancel = { scope.launch { animate(dy, 0f, animationSpec = tween(160)) { v, _ -> dy = v } } },
+                        onVerticalDrag = { change, amount -> change.consume(); dy = (dy + amount).coerceIn(lo, hi) },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, label, tint = Color.White, modifier = Modifier.size(size * (if (armed) 0.55f else 0.45f)))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = Color(0xFFB0B8C0), fontSize = 13.sp)
+        Text(hint, color = Color(0xFF7D8790), fontSize = 11.sp)
     }
 }
