@@ -91,7 +91,6 @@ object Notifications {
     fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
-        val tagged = info.tag?.let { "${it.name} · $label" } ?: label
         val status = when (info.state) {
             android.telecom.Call.STATE_HOLDING -> "On hold"
             android.telecom.Call.STATE_ACTIVE -> "Ongoing call"
@@ -100,8 +99,11 @@ object Notifications {
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .setSmallIcon(R.drawable.ic_stat_call)
-            .setContentTitle(tagged)
-            .setContentText(status)
+            // Name alone as the title (names can be long); the category sits in the short chip text
+            // and the second line, so it is never pushed out by a long name.
+            .setContentTitle(label)
+            .setContentText(info.tag?.let { "${it.name} · $status" } ?: status)
+            .setLargeIcon(contactPhoto(ctx, info.photoUri))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setOngoing(true)
@@ -117,9 +119,30 @@ object Notifications {
         // Ignored on older Android, and when the user turned live updates off for the app.
         b.addExtras(Bundle().apply {
             putBoolean("android.requestPromotedOngoing", true)
-            if (!live) putString("android.shortCriticalText", if (info.state == android.telecom.Call.STATE_HOLDING) "On hold" else "Calling")
+            // Right side of the chip: the category when there is one, else the state while no timer runs.
+            val chip = info.tag?.name ?: if (!live) (if (info.state == android.telecom.Call.STATE_HOLDING) "On hold" else "Calling") else null
+            if (chip != null) putString("android.shortCriticalText", chip)
         })
         NotificationManagerCompat.from(ctx).notify(ID_ONGOING, b.build())
+    }
+
+    /** The contact's photo as a round bitmap for the notification's large icon, or null. */
+    private fun contactPhoto(ctx: Context, uri: String?): android.graphics.Bitmap? {
+        if (uri.isNullOrBlank()) return null
+        return try {
+            val src = ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
+            val d = 128
+            val side = minOf(src.width, src.height)
+            val square = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+            val scaled = android.graphics.Bitmap.createScaledBitmap(square, d, d, true)
+            val out = android.graphics.Bitmap.createBitmap(d, d, android.graphics.Bitmap.Config.ARGB_8888)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            val c = android.graphics.Canvas(out)
+            c.drawCircle(d / 2f, d / 2f, d / 2f, paint)
+            paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
+            c.drawBitmap(scaled, 0f, 0f, paint)
+            out
+        } catch (_: Exception) { null }
     }
 
     /** Whether Android 16 live updates (the chip / island) are allowed for this app, and whether the current call got one. */
