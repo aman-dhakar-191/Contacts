@@ -124,7 +124,11 @@ internal fun dialHits(number: String, contacts: List<ContactSummary>, phones: Ma
     return contacts.flatMap { c ->
         val nameHit = T9.matches(c.name, number)
         phones[c.id].orEmpty().filter { nameHit || PhoneUtil.digits(it.number).contains(number) }.map { c to it }
-    }.take(limit)
+    }
+        // A contact can list the same number twice (e.g. synced from two accounts). The list rows are keyed by
+        // contact + number, so a repeat would crash the LazyColumn ("Key ... was already used"). Keep one.
+        .distinctBy { (c, p) -> c.id to PhoneUtil.key(p.number) }
+        .take(limit)
 }
 
 /**
