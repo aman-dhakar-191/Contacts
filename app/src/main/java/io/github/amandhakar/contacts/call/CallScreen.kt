@@ -215,7 +215,7 @@ fun CallScreen(onClose: () -> Unit) {
     }
 }
 
-/** In-call keypad: the same keys as the dialer, shows what you have pressed, and matches contacts by those digits. */
+/** In-call keypad: the dialer's own display, match cards and keys. Pressed keys are sent as tones. */
 @Composable
 private fun InCallKeypad(call: Call, onClose: () -> Unit) {
     val ctx = LocalContext.current
@@ -230,52 +230,51 @@ private fun InCallKeypad(call: Call, onClose: () -> Unit) {
             contacts = c; phones = p
         }
     }
-    val hits = remember(typed, contacts, phones) {
-        if (typed.length < 2 || !typed.all { it.isDigit() }) emptyList()
-        else contacts.flatMap { c ->
-            val nameHit = io.github.amandhakar.contacts.util.T9.matches(c.name, typed)
-            phones[c.id].orEmpty()
-                .filter { nameHit || io.github.amandhakar.contacts.util.PhoneUtil.digits(it.number).contains(typed) }
-                .map { c to it }
-        }.take(3)
+    val hits = remember(typed, contacts, phones) { io.github.amandhakar.contacts.ui.dialHits(typed, contacts, phones, 3) }
+    val clip = io.github.amandhakar.contacts.ui.rememberClipboardNumber()
+
+    suspend fun tone(ch: Char) {
+        call.playDtmfTone(ch); delay(150); call.stopDtmfTone(); delay(90)
     }
-    AlertDialog(
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
-        dismissButton = if (typed.isNotEmpty()) ({ TextButton(onClick = { typed = "" }) { Text("Clear") } }) else null,
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    typed.ifEmpty { "Tap keys to send tones" },
-                    fontSize = if (typed.isEmpty()) 14.sp else if (typed.length > 12) 22.sp else 30.sp,
-                    color = if (typed.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1, textAlign = TextAlign.Center,
-                    modifier = Modifier.height(40.dp).padding(top = 6.dp),
-                )
-                // Contacts that match the digits (shown for reference; tapping does not dial).
-                Column(Modifier.height(54.dp)) {
-                    hits.forEach { (c, p) ->
-                        Text(
-                            "${c.name} · ${p.number}", fontSize = 12.sp, maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(0.94f),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 14.dp)) {
+                // Matching contacts, in the same cards as the dialer (room for three so the keys do not jump).
+                Column(
+                    Modifier.padding(horizontal = 12.dp).height(180.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                ) {
+                    hits.forEach { (c, p) -> io.github.amandhakar.contacts.ui.DialMatchRow(c, p, onClick = null) }
                 }
-                for (row in io.github.amandhakar.contacts.ui.KEYS) {
-                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                        for ((d, letters) in row) {
-                            io.github.amandhakar.contacts.ui.Key(d, letters, size = 62.dp, onClick = {
-                                typed += d
-                                call.playDtmfTone(d[0])
-                                scope.launch { delay(150); call.stopDtmfTone() }
-                            })
-                        }
-                    }
+                Box(Modifier.height(64.dp), contentAlignment = Alignment.Center) {
+                    io.github.amandhakar.contacts.ui.DialNumberDisplay(
+                        typed, "Tap keys to send tones", clip,
+                        // A pasted number is shown and sent as tones, one digit at a time (e.g. a meeting PIN).
+                        onPaste = { pasted ->
+                            typed += pasted
+                            scope.launch { pasted.forEach { if (it in "0123456789*#") tone(it) } }
+                        },
+                    )
+                }
+                io.github.amandhakar.contacts.ui.DialKeyGrid(keySize = 68.dp, spacing = 18.dp, onKey = { d ->
+                    typed += d
+                    scope.launch { tone(d[0]) }
+                })
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                    if (typed.isNotEmpty()) TextButton(onClick = { typed = "" }) { Text("Clear") }
+                    TextButton(onClick = onClose) { Text("Close") }
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 private fun statusText(info: CallInfo, ended: Boolean, now: Long): String {
