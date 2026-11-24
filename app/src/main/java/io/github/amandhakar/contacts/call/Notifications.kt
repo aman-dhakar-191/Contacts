@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import io.github.amandhakar.contacts.MainActivity
 import io.github.amandhakar.contacts.R
 
@@ -68,9 +69,12 @@ object Notifications {
             ctx, 12, Intent(ctx, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_DECLINE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val person = Person.Builder().setName(label).setImportant(true).build()
+        val photo = contactPhoto(ctx, info.photoUri)
+        val person = Person.Builder().setName(label).setImportant(true)
+            .also { if (photo != null) it.setIcon(IconCompat.createWithBitmap(photo)) }.build()
         val n = NotificationCompat.Builder(ctx, CH_INCOMING)
-            .setSmallIcon(R.drawable.ic_stat_call)
+            .also { smallIcon(it, photo) }
+            .setLargeIcon(photo)
             .setContentTitle(label)
             .setContentText("Incoming call" + (info.tag?.let { " · ${it.name}" } ?: ""))
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -97,13 +101,14 @@ object Notifications {
             else -> "Calling…"
         } + if (otherCalls > 0) " · +$otherCalls more" else ""
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
+        val photo = contactPhoto(ctx, info.photoUri)
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
-            .setSmallIcon(R.drawable.ic_stat_call)
+            .also { smallIcon(it, photo) }
             // Name alone as the title (names can be long); the category sits in the short chip text
             // and the second line, so it is never pushed out by a long name.
             .setContentTitle(label)
             .setContentText(info.tag?.let { "${it.name} · $status" } ?: status)
-            .setLargeIcon(contactPhoto(ctx, info.photoUri))
+            .setLargeIcon(photo)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setOngoing(true)
@@ -124,6 +129,14 @@ object Notifications {
             if (chip != null) putString("android.shortCriticalText", chip)
         })
         NotificationManagerCompat.from(ctx).notify(ID_ONGOING, b.build())
+    }
+
+    /**
+     * EXPERIMENT: the contact's photo as the small icon (the left side of the island). Android usually turns a small
+     * icon into a flat one-colour shape, so this may show as a plain disc; with no photo the phone glyph is used.
+     */
+    private fun smallIcon(b: NotificationCompat.Builder, photo: android.graphics.Bitmap?) {
+        if (photo != null) b.setSmallIcon(IconCompat.createWithBitmap(photo)) else b.setSmallIcon(R.drawable.ic_stat_call)
     }
 
     /** The contact's photo as a round bitmap for the notification's large icon, or null. */
