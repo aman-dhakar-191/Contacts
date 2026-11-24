@@ -119,8 +119,8 @@ object Notifications {
         // Ignored on older Android, and when the user turned live updates off for the app.
         b.addExtras(Bundle().apply {
             putBoolean("android.requestPromotedOngoing", true)
-            // Right side of the chip: the category when there is one, else the state while no timer runs.
-            val chip = info.tag?.name ?: if (!live) (if (info.state == android.telecom.Call.STATE_HOLDING) "On hold" else "Calling") else null
+            // Before the call is answered: the category (else the state) in the chip. Once live, no text, so the timer shows.
+            val chip = if (live) null else info.tag?.name ?: (if (info.state == android.telecom.Call.STATE_HOLDING) "On hold" else "Calling")
             if (chip != null) putString("android.shortCriticalText", chip)
         })
         NotificationManagerCompat.from(ctx).notify(ID_ONGOING, b.build())
