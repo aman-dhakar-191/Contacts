@@ -24,6 +24,9 @@ data class CallInfo(
 
 /** The calls Android Telecom is currently showing us, as snapshots the UI can observe. */
 object CallHub {
+    /** Looks up a caller-ID name remembered from an earlier call (set by the call service). */
+    @Volatile var rememberedName: ((String) -> String?)? = null
+
     private val tracked = ArrayList<Call>()
     private val callers = HashMap<Call, CallerInfo>()
     private val tags = HashMap<Call, Tag>()
@@ -62,7 +65,7 @@ object CallHub {
             val caller = callers[c]
             CallInfo(
                 call = c, number = number,
-                name = caller?.name ?: d.callerDisplayName?.takeIf { it.isNotBlank() },
+                name = caller?.name ?: d.callerDisplayName?.takeIf { it.isNotBlank() } ?: rememberedName?.invoke(number),
                 photoUri = caller?.photoUri,
                 state = c.state,
                 incoming = d.callDirection == Call.Details.DIRECTION_INCOMING,

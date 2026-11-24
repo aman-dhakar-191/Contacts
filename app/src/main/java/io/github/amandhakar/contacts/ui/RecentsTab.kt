@@ -115,6 +115,8 @@ fun RecentsTab(vm: AppViewModel) {
             return@Column
         }
         val byDay = remember(shown) { shown.groupBy { dayLabel(it.date) } }
+        // Caller-ID names remembered from earlier incoming calls (only when the switch in Settings is on).
+        val remembered = remember { if (vm.prefs.rememberCallerNames) io.github.amandhakar.contacts.data.CallerNames(ctx) else null }
         LazyColumn(Modifier.fillMaxSize()) {
             byDay.forEach { (day, list) ->
                 stickyHeader(key = "d$day") {
@@ -125,7 +127,8 @@ fun RecentsTab(vm: AppViewModel) {
                 }
                 items(list, key = { it.id }) { e ->
                     val contact = index[PhoneUtil.key(e.number)]
-                    val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() } ?: e.number.ifBlank { "Unknown" }
+                    val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() }
+                        ?: remembered?.get(e.number) ?: e.number.ifBlank { "Unknown" }
                     CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id])
                 }
             }

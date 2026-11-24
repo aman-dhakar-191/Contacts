@@ -67,6 +67,11 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("identifier_version", 1)
         set(v) = sp.edit().putInt("identifier_version", v).apply()
 
+    /** Remember the caller-ID name Android gives for unknown callers, to show it on later calls and in Recents. */
+    var rememberCallerNames: Boolean
+        get() = sp.getBoolean("remember_caller_names", true)
+        set(v) = sp.edit().putBoolean("remember_caller_names", v).apply()
+
     /** Experimental: show the name of the connected Bluetooth device in calls. Needs the Bluetooth permission. */
     var bluetoothNames: Boolean
         get() = sp.getBoolean("bt_names", true)
