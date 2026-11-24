@@ -88,6 +88,8 @@ object Notifications {
      * The live notification for the call in progress: who, how long, and Speaker / Mute / End call buttons.
      * A plain ongoing notification (not CallStyle), so it needs no foreground service.
      */
+    // Android 12+ draws notification action buttons as text only and ignores their icon resource, so each label
+    // carries a symbol (speaker, mute, no-phone, handset) to give the buttons an icon.
     fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
@@ -111,9 +113,9 @@ object Notifications {
             .setSilent(true)
             .setContentIntent(callActivity(ctx))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(if (speakerOn) R.drawable.ic_action_speaker_off else R.drawable.ic_action_speaker, if (speakerOn) "Speaker off" else "Speaker", action(ctx, CallActionReceiver.ACTION_SPEAKER, 31))
-            .addAction(if (muted) R.drawable.ic_action_mic else R.drawable.ic_action_mic_off, if (muted) "Unmute" else "Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
-            .addAction(R.drawable.ic_action_call_end, "End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
+            .addAction(if (speakerOn) R.drawable.ic_action_speaker_off else R.drawable.ic_action_speaker, if (speakerOn) "\uD83D\uDD08 Speaker off" else "\uD83D\uDD0A Speaker", action(ctx, CallActionReceiver.ACTION_SPEAKER, 31))
+            .addAction(if (muted) R.drawable.ic_action_mic else R.drawable.ic_action_mic_off, if (muted) "\uD83C\uDFA4 Unmute" else "\uD83D\uDD07 Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
+            .addAction(R.drawable.ic_action_call_end, "\uD83D\uDCF5 End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
         if (live) b.setUsesChronometer(true).setWhen(info.connectTimeMillis).setShowWhen(true) else b.setShowWhen(false)
         // Android 16 "live update": asks the system to show this as a status-bar chip / island with the call timer.
         // Ignored on older Android, and when the user turned live updates off for the app.
@@ -186,7 +188,7 @@ object Notifications {
                 ctx, 21, Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            b.addAction(R.drawable.ic_action_call, "Call back", callBack)
+            b.addAction(R.drawable.ic_action_call, "\uD83D\uDCDE Call back", callBack)
         }
         NotificationManagerCompat.from(ctx).notify(ID_MISSED + (number.hashCode() and 0xFFFF) + 100, b.build())
     }
