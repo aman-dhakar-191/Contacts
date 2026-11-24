@@ -150,7 +150,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     if (vm.isDefaultDialer) "Calls ring and are answered here." else "Set it to answer calls here and block numbers.",
                     trailing = { if (!vm.isDefaultDialer) Button(onClick = requestDefaultDialer) { Text("Set") } },
                 )
-                InfoRow(Icons.Filled.Security, "Permissions", "Check that contacts, phone, call log, microphone and notifications are allowed", onClick = requestPermissions)
+                InfoRow(Icons.Filled.Security, "Permissions", "Check that contacts, phone, call log, microphone and notifications are allowed" + if (vm.bluetoothNames) " (and Bluetooth, an experimental option)" else "", onClick = requestPermissions)
             }
 
             SectionLabel("Google contacts")
@@ -254,6 +254,21 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     if (vm.prefs.identifierOn) "On · ${idRules.count { it.enabled }} of ${idRules.size} rules on" else "Rules off · flagged numbers are still shown",
                     onClick = { vm.push(Screen.Identifier) },
                 )
+            }
+
+            SectionLabel("Experimental")
+            GroupCard {
+                InfoRow(
+                    Icons.Filled.Science, "Bluetooth device names",
+                    if (!vm.bluetoothNames) "Off · calls just say \"Bluetooth\""
+                    else if (vm.btGranted) "On · the call screen shows your earbuds' name"
+                    else "On · needs the Bluetooth permission, tap Allow",
+                    onClick = { vm.updateBluetoothNames(!vm.bluetoothNames) },
+                    trailing = { Switch(vm.bluetoothNames, { vm.updateBluetoothNames(it) }) },
+                )
+                if (vm.bluetoothNames && !vm.btGranted) {
+                    InfoRow(Icons.Filled.Security, "Allow Bluetooth permission", "Lets the app read the name of the connected device", onClick = requestPermissions)
+                }
             }
 
             SectionLabel("Diagnostics")

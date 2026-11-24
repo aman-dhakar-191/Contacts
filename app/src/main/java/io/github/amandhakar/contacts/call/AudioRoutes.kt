@@ -4,6 +4,9 @@ import android.telecom.CallAudioState
 
 /** Where the call audio can go (phone earpiece, wired headset, Bluetooth, speaker) and how to name it. */
 object AudioRoutes {
+    /** The experimental "Bluetooth device names" switch in Settings. When off, only "Bluetooth" is shown. */
+    @Volatile var showNames: Boolean = true
+
     data class Route(val route: Int, val label: String)
 
     /** Routes the phone offers right now, in a fixed order. */
@@ -28,7 +31,7 @@ object AudioRoutes {
 
     /** The Bluetooth device name, only if Android lets us read it (needs the Bluetooth permission on Android 12+). */
     @Suppress("DEPRECATION")
-    private fun bluetoothName(a: CallAudioState): String? = try {
+    private fun bluetoothName(a: CallAudioState): String? = if (!showNames) null else try {
         a.activeBluetoothDevice?.name?.takeIf { it.isNotBlank() }
     } catch (_: Exception) { null }
 
