@@ -211,30 +211,71 @@ fun CallScreen(onClose: () -> Unit) {
     }
 
     if (showKeypad && primary != null) {
-        AlertDialog(
-            onDismissRequest = { showKeypad = false },
-            confirmButton = { TextButton(onClick = { showKeypad = false }) { Text("Close") } },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    for (row in listOf("123", "456", "789", "*0#")) {
-                        Row {
-                            for (ch in row) {
-                                Box(
-                                    Modifier.padding(6.dp).size(60.dp).clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                                        .clickable {
-                                            primary.call.playDtmfTone(ch)
-                                            scope.launch { delay(150); primary.call.stopDtmfTone() }
-                                        },
-                                    contentAlignment = Alignment.Center,
-                                ) { Text(ch.toString(), fontSize = 24.sp) }
-                            }
+        InCallKeypad(primary.call) { showKeypad = false }
+    }
+}
+
+/** In-call keypad: the same keys as the dialer, shows what you have pressed, and matches contacts by those digits. */
+@Composable
+private fun InCallKeypad(call: Call, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var typed by remember { mutableStateOf("") }
+    var contacts by remember { mutableStateOf<List<io.github.amandhakar.contacts.data.ContactSummary>>(emptyList()) }
+    var phones by remember { mutableStateOf<Map<Long, List<io.github.amandhakar.contacts.data.PhoneEntry>>>(emptyMap()) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val repo = io.github.amandhakar.contacts.data.ContactsRepo(ctx)
+            val c = repo.contacts(); val p = repo.allPhones()
+            contacts = c; phones = p
+        }
+    }
+    val hits = remember(typed, contacts, phones) {
+        if (typed.length < 2 || !typed.all { it.isDigit() }) emptyList()
+        else contacts.flatMap { c ->
+            val nameHit = io.github.amandhakar.contacts.util.T9.matches(c.name, typed)
+            phones[c.id].orEmpty()
+                .filter { nameHit || io.github.amandhakar.contacts.util.PhoneUtil.digits(it.number).contains(typed) }
+                .map { c to it }
+        }.take(3)
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        dismissButton = if (typed.isNotEmpty()) ({ TextButton(onClick = { typed = "" }) { Text("Clear") } }) else null,
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    typed.ifEmpty { "Tap keys to send tones" },
+                    fontSize = if (typed.isEmpty()) 14.sp else if (typed.length > 12) 22.sp else 30.sp,
+                    color = if (typed.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, textAlign = TextAlign.Center,
+                    modifier = Modifier.height(40.dp).padding(top = 6.dp),
+                )
+                // Contacts that match the digits (shown for reference; tapping does not dial).
+                Column(Modifier.height(54.dp)) {
+                    hits.forEach { (c, p) ->
+                        Text(
+                            "${c.name} · ${p.number}", fontSize = 12.sp, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                for (row in io.github.amandhakar.contacts.ui.KEYS) {
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        for ((d, letters) in row) {
+                            io.github.amandhakar.contacts.ui.Key(d, letters, size = 62.dp, onClick = {
+                                typed += d
+                                call.playDtmfTone(d[0])
+                                scope.launch { delay(150); call.stopDtmfTone() }
+                            })
                         }
                     }
                 }
-            },
-        )
-    }
+            }
+        },
+    )
 }
 
 private fun statusText(info: CallInfo, ended: Boolean, now: Long): String {
