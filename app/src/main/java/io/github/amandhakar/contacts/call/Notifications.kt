@@ -95,19 +95,23 @@ object Notifications {
     fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
-        val status = when (info.state) {
-            android.telecom.Call.STATE_HOLDING -> "On hold"
-            android.telecom.Call.STATE_ACTIVE -> "Ongoing call"
-            else -> "Calling…"
-        } + if (otherCalls > 0) " · +$otherCalls more" else ""
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
+        // The island / pill draws the title, so the title is the short state: "Calling…" before it is answered,
+        // then the running timer (CallService re-posts every second). The name and category go on the second line.
+        val title = when {
+            info.state == android.telecom.Call.STATE_HOLDING -> "On hold"
+            live -> {
+                val secs = ((System.currentTimeMillis() - info.connectTimeMillis) / 1000).coerceAtLeast(0)
+                if (secs >= 3600) "%d:%02d:%02d".format(secs / 3600, secs / 60 % 60, secs % 60) else "%02d:%02d".format(secs / 60, secs % 60)
+            }
+            else -> "Calling…"
+        }
+        val who = (info.tag?.let { "${it.name} · $label" } ?: label) + if (otherCalls > 0) " · +$otherCalls more" else ""
         val photo = contactPhoto(ctx, info.photoUri)
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .also { smallIcon(it, photo) }
-            // Name alone as the title (names can be long); the category sits in the short chip text
-            // and the second line, so it is never pushed out by a long name.
-            .setContentTitle(label)
-            .setContentText(info.tag?.let { "${it.name} · $status" } ?: status)
+            .setContentTitle(title)
+            .setContentText(who)
             .setLargeIcon(photo)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -139,9 +143,17 @@ object Notifications {
         if (photo != null) b.setSmallIcon(IconCompat.createWithBitmap(photo)) else b.setSmallIcon(R.drawable.ic_stat_call)
     }
 
-    /** The contact's photo as a round bitmap for the notification's large icon, or null. */
-    private fun contactPhoto(ctx: Context, uri: String?): android.graphics.Bitmap? {
+    private var photoUri: String? = null
+    private var photoBitmap: android.graphics.Bitmap? = null
+
+    /** The contact's photo as a round bitmap for the notification's large icon, or null. Remembers the last one: the live call is re-posted every second. */
+    @Synchronized private fun contactPhoto(ctx: Context, uri: String?): android.graphics.Bitmap? {
         if (uri.isNullOrBlank()) return null
+        if (uri == photoUri) return photoBitmap
+        return loadPhoto(ctx, uri).also { photoUri = uri; photoBitmap = it }
+    }
+
+    private fun loadPhoto(ctx: Context, uri: String): android.graphics.Bitmap? {
         return try {
             val src = ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
             val d = 128

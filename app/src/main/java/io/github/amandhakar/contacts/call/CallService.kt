@@ -21,12 +21,24 @@ class CallService : InCallService() {
     private val answered = HashSet<Call>()
     private val autoDecided = HashSet<Call>()
 
+    private val ui = android.os.Handler(android.os.Looper.getMainLooper())
+    // Re-posts the live call notification each second so the timer in the island / pill keeps counting.
+    private val clock = object : Runnable {
+        override fun run() {
+            val c = CallHub.current()
+            if (c != null && c.state == Call.STATE_ACTIVE && c.connectTimeMillis > 0) updateNotifications()
+            ui.postDelayed(this, 1000)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         CallHub.service = this
+        ui.postDelayed(clock, 1000)
     }
 
     override fun onDestroy() {
+        ui.removeCallbacks(clock)
         CallHub.service = null
         scope.cancel()
         super.onDestroy()
