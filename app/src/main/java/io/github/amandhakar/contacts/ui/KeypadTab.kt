@@ -60,7 +60,7 @@ import io.github.amandhakar.contacts.call.Dialer
 import io.github.amandhakar.contacts.util.PhoneUtil
 import io.github.amandhakar.contacts.util.T9
 
-private val KEYS = listOf(
+internal val KEYS = listOf(
     listOf("1" to "", "2" to "ABC", "3" to "DEF"),
     listOf("4" to "GHI", "5" to "JKL", "6" to "MNO"),
     listOf("7" to "PQRS", "8" to "TUV", "9" to "WXYZ"),
@@ -213,9 +213,9 @@ fun KeypadTab(vm: AppViewModel) {
 }
 
 @Composable
-private fun Key(digit: String, letters: String, onClick: () -> Unit, onLong: () -> Unit) {
+internal fun Key(digit: String, letters: String, onClick: () -> Unit, onLong: () -> Unit = {}, size: androidx.compose.ui.unit.Dp = 76.dp) {
     Column(
-        Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .combinedClickable(onClick = onClick, onLongClick = onLong),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
