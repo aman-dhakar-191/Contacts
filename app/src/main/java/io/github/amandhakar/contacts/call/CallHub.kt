@@ -87,6 +87,8 @@ object CallHub {
 
     fun setMuted(muted: Boolean) { service?.setMuted(muted) }
 
+    fun setRoute(route: Int) { service?.setAudioRoute(route) }
+
     fun setSpeaker(on: Boolean) {
         service?.setAudioRoute(if (on) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_WIRED_OR_EARPIECE)
     }

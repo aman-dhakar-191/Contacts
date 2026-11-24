@@ -37,7 +37,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -124,6 +127,14 @@ fun CallScreen(onClose: () -> Unit) {
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
             Spacer(Modifier.height(8.dp))
             Text(statusText(shown, primary == null, now), color = Color(0xFFB0B8C0), fontSize = 18.sp)
+            // Where the audio is going, when it is not the phone's own earpiece (Bluetooth, wired headset, speaker).
+            if (primary != null && primary.state != Call.STATE_RINGING && audio?.route != null && audio?.route != CallAudioState.ROUTE_EARPIECE) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(routeIcon(audio?.route), null, tint = Color(0xFF7DFFA0), modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(AudioRoutes.currentLabel(audio), color = Color(0xFF7DFFA0), fontSize = 14.sp)
+                }
+            }
             shown.tag?.let { t ->
                 Spacer(Modifier.height(10.dp))
                 io.github.amandhakar.contacts.ui.CategoryBadge(t.name, t.color, Modifier.clickable { reportWrong = true })
@@ -164,13 +175,42 @@ fun CallScreen(onClose: () -> Unit) {
                 }
             } else if (primary != null) {
                 val muted = audio?.isMuted == true
-                val speaker = audio?.route == CallAudioState.ROUTE_SPEAKER
+                val routes = AudioRoutes.available(audio)
+                var routeMenu by remember { mutableStateOf(false) }
+                val onPhone = audio?.route == CallAudioState.ROUTE_EARPIECE || audio?.route == null
                 val held = primary.state == Call.STATE_HOLDING
                 // Both rows use three equal columns (an empty cell where a button is missing) so the buttons line up.
                 Row(Modifier.fillMaxWidth()) {
                     Cell { ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted) { CallHub.setMuted(!muted) } }
                     Cell { ToggleButton(Icons.Filled.Dialpad, "Keypad", false) { showKeypad = true } }
-                    Cell { ToggleButton(Icons.Filled.VolumeUp, "Speaker", speaker) { CallHub.setSpeaker(!speaker) } }
+                    Cell {
+                        Box {
+                            // One audio button: with only phone + speaker it toggles; with a headset or Bluetooth it opens a list.
+                            ToggleButton(
+                                routeIcon(audio?.route),
+                                when (audio?.route) {
+                                    CallAudioState.ROUTE_BLUETOOTH -> "Bluetooth"
+                                    CallAudioState.ROUTE_WIRED_HEADSET -> "Headset"
+                                    CallAudioState.ROUTE_SPEAKER -> "Speaker"
+                                    else -> "Audio"
+                                },
+                                !onPhone,
+                            ) {
+                                if (routes.size <= 2) {
+                                    CallHub.setSpeaker(audio?.route != CallAudioState.ROUTE_SPEAKER)
+                                } else routeMenu = true
+                            }
+                            androidx.compose.material3.DropdownMenu(expanded = routeMenu, onDismissRequest = { routeMenu = false }) {
+                                routes.forEach { r ->
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(r.label, fontWeight = if (r.route == audio?.route) androidx.compose.ui.text.font.FontWeight.Bold else null) },
+                                        leadingIcon = { Icon(routeIcon(r.route), null) },
+                                        onClick = { routeMenu = false; CallHub.setRoute(r.route) },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth()) {
@@ -276,6 +316,13 @@ private fun InCallKeypad(call: Call, onClose: () -> Unit) {
             }
         },
     )
+}
+
+private fun routeIcon(route: Int?): ImageVector = when (route) {
+    CallAudioState.ROUTE_SPEAKER -> Icons.Filled.VolumeUp
+    CallAudioState.ROUTE_BLUETOOTH -> Icons.Filled.Bluetooth
+    CallAudioState.ROUTE_WIRED_HEADSET -> Icons.Filled.Headset
+    else -> Icons.Filled.PhoneInTalk
 }
 
 private fun statusText(info: CallInfo, ended: Boolean, now: Long): String {

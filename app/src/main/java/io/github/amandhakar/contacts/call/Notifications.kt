@@ -92,7 +92,7 @@ object Notifications {
      * The live notification for the call in progress: who, how long, and Speaker / Mute / End call buttons.
      * A plain ongoing notification (not CallStyle), so it needs no foreground service.
      */
-    fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean) {
+    fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean, route: String? = null) {
         if (!canPost(ctx)) return
         val label = info.name ?: info.number.ifBlank { "Unknown" }
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
@@ -106,7 +106,7 @@ object Notifications {
             }
             else -> "Calling…"
         }
-        val who = (info.tag?.let { "${it.name} · $label" } ?: label) + if (otherCalls > 0) " · +$otherCalls more" else ""
+        val who = (info.tag?.let { "${it.name} · $label" } ?: label) + (route?.let { " · $it" } ?: "") + if (otherCalls > 0) " · +$otherCalls more" else ""
         val photo = contactPhoto(ctx, info.photoUri)
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .also { smallIcon(it, photo) }

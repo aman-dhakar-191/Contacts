@@ -108,7 +108,7 @@ class CallService : InCallService() {
         val current = CallHub.current()
         if (current != null) {
             val audio = CallHub.audio.value
-            Notifications.ongoing(this, current, calls.size - 1, audio?.route == CallAudioState.ROUTE_SPEAKER, audio?.isMuted == true)
+            Notifications.ongoing(this, current, calls.size - 1, audio?.route == CallAudioState.ROUTE_SPEAKER, audio?.isMuted == true, AudioRoutes.notificationLabel(audio))
         } else {
             Notifications.cancelOngoing(this)
         }
