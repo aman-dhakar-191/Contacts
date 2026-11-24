@@ -70,7 +70,7 @@ object Notifications {
         )
         val person = Person.Builder().setName(label).setImportant(true).build()
         val n = NotificationCompat.Builder(ctx, CH_INCOMING)
-            .setSmallIcon(android.R.drawable.sym_call_incoming)
+            .setSmallIcon(R.drawable.ic_stat_call)
             .setContentTitle(label)
             .setContentText("Incoming call" + (info.tag?.let { " · ${it.name}" } ?: ""))
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -99,7 +99,7 @@ object Notifications {
         } + if (otherCalls > 0) " · +$otherCalls more" else ""
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
-            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setSmallIcon(R.drawable.ic_stat_call)
             .setContentTitle(tagged)
             .setContentText(status)
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -109,9 +109,9 @@ object Notifications {
             .setSilent(true)
             .setContentIntent(callActivity(ctx))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(0, if (speakerOn) "Speaker off" else "Speaker", action(ctx, CallActionReceiver.ACTION_SPEAKER, 31))
-            .addAction(0, if (muted) "Unmute" else "Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
-            .addAction(0, "End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
+            .addAction(if (speakerOn) R.drawable.ic_action_speaker_off else R.drawable.ic_action_speaker, if (speakerOn) "Speaker off" else "Speaker", action(ctx, CallActionReceiver.ACTION_SPEAKER, 31))
+            .addAction(if (muted) R.drawable.ic_action_mic else R.drawable.ic_action_mic_off, if (muted) "Unmute" else "Mute", action(ctx, CallActionReceiver.ACTION_MUTE, 32))
+            .addAction(R.drawable.ic_action_call_end, "End call", action(ctx, CallActionReceiver.ACTION_HANGUP, 33))
         if (live) b.setUsesChronometer(true).setWhen(info.connectTimeMillis).setShowWhen(true) else b.setShowWhen(false)
         // Android 16 "live update": asks the system to show this as a status-bar chip / island with the call timer.
         // Ignored on older Android, and when the user turned live updates off for the app.
@@ -152,7 +152,7 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = NotificationCompat.Builder(ctx, CH_MISSED)
-            .setSmallIcon(android.R.drawable.sym_call_missed)
+            .setSmallIcon(R.drawable.ic_stat_missed)
             .setContentTitle("Missed call")
             .setContentText(label)
             .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
@@ -163,14 +163,14 @@ object Notifications {
                 ctx, 21, Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            b.addAction(0, "Call back", callBack)
+            b.addAction(R.drawable.ic_action_call, "Call back", callBack)
         }
         NotificationManagerCompat.from(ctx).notify(ID_MISSED + (number.hashCode() and 0xFFFF) + 100, b.build())
     }
 
     fun recording(ctx: Context): Notification =
         NotificationCompat.Builder(ctx, CH_RECORDING)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_stat_record)
             .setContentTitle("Recording call")
             .setOngoing(true)
             .setContentIntent(callActivity(ctx))

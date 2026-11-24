@@ -2,6 +2,8 @@
 
 package io.github.amandhakar.contacts.ui
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.telecom.PhoneAccountHandle
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -32,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,6 +51,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.amandhakar.contacts.AppViewModel
 import io.github.amandhakar.contacts.Screen
 import io.github.amandhakar.contacts.call.Dialer
@@ -67,6 +74,24 @@ fun KeypadTab(vm: AppViewModel) {
     val phones by vm.phones.collectAsState()
     var number by rememberSaveable { mutableStateOf("") }
     var pickSim by remember { mutableStateOf(false) }
+
+    // A phone number on the clipboard is offered as a one-tap paste. Re-read whenever the app comes
+    // to the front or the clip changes (Android only lets a foreground app read the clipboard).
+    var clipNumber by remember { mutableStateOf<String?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        fun refresh() { clipNumber = clipboardNumber(cm) }
+        val clipListener = ClipboardManager.OnPrimaryClipChangedListener { refresh() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) refresh() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        cm?.addPrimaryClipChangedListener(clipListener)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) refresh()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            cm?.removePrimaryClipChangedListener(clipListener)
+        }
+    }
 
     LaunchedEffect(vm.dialPrefill) { vm.dialPrefill?.let { number = it; vm.dialPrefill = null } }
 
@@ -110,12 +135,23 @@ fun KeypadTab(vm: AppViewModel) {
         Column(Modifier.fillMaxWidth().height(96.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text(
                 if (number.isEmpty()) "Enter a number" else number,
-                Modifier.padding(horizontal = 24.dp),
+                Modifier.padding(horizontal = 24.dp).combinedClickable(
+                    onClick = {},
+                    onLongClick = { clipNumber?.let { number = number + it } },
+                ),
                 fontSize = when { number.isEmpty() -> 22.sp; number.length > 14 -> 26.sp; number.length > 10 -> 32.sp; else -> 40.sp },
                 color = if (number.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center, maxLines = 1,
             )
-            if (exact != null) {
+            val pasteable = clipNumber?.takeIf { number.isEmpty() }
+            if (pasteable != null) {
+                androidx.compose.material3.AssistChip(
+                    onClick = { number = pasteable },
+                    label = { Text("Paste $pasteable", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(Icons.Filled.ContentPaste, null, Modifier.size(18.dp)) },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            } else if (exact != null) {
                 Text(exact.name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
             } else if (number.length >= 3) {
                 TextButton(onClick = { vm.push(Screen.Edit(null, number)) }) { Text("Add to contacts") }
@@ -186,4 +222,20 @@ private fun Key(digit: String, letters: String, onClick: () -> Unit, onLong: () 
         Text(digit, fontSize = 28.sp)
         if (letters.isNotEmpty()) Text(letters, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * The phone number on the clipboard, cleaned to keypad characters, or null if the clip is not
+ * (just) a phone number. Accepts "+91 98765-43210", "(022) 1234 5678" etc.; rejects sentences.
+ */
+private fun clipboardNumber(cm: ClipboardManager?): String? {
+    val text = try {
+        cm?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+    } catch (_: Exception) { null } ?: return null
+    val t = text.trim()
+    if (t.isEmpty() || t.length > 32) return null
+    if (!t.all { it.isDigit() || it in "+*#-.()/ \u00A0" }) return null
+    val cleaned = t.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }
+    val digits = cleaned.count { it.isDigit() }
+    return if (digits in 3..16 && cleaned.lastIndexOf('+') <= 0) cleaned else null
 }

@@ -183,8 +183,10 @@ fun SwipeActionRow(
         }
         Box(
             Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
+                // offset BEFORE background: the opaque background must slide with the row,
+                // otherwise it stays in place and hides the action panes behind it.
                 .offset { IntOffset(dragOffset.roundToInt(), 0) }
+                .background(MaterialTheme.colorScheme.surface)
                 .pointerInput(swipeLeft, swipeRight, revealPx) {
                     detectHorizontalDragGestures(
                         onDragStart = {
