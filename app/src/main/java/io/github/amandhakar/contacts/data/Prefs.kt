@@ -67,6 +67,11 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("identifier_version", 1)
         set(v) = sp.edit().putInt("identifier_version", v).apply()
 
+    /** Experimental: show the name of the connected Bluetooth device in calls. Needs the Bluetooth permission. */
+    var bluetoothNames: Boolean
+        get() = sp.getBoolean("bt_names", true)
+        set(v) = sp.edit().putBoolean("bt_names", v).apply()
+
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
     var speakerForRecording: Boolean
         get() = sp.getBoolean("speaker_for_recording", true)

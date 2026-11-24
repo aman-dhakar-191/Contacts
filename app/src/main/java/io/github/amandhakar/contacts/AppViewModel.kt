@@ -63,6 +63,10 @@ val REQUIRED_PERMISSIONS = arrayOf(
     Manifest.permission.POST_NOTIFICATIONS,
 )
 
+/** What the Permissions row asks for: the required ones, plus Bluetooth when the experimental switch is on (Android 12+). */
+fun permissionsToRequest(bluetoothNames: Boolean): Array<String> =
+    if (bluetoothNames && android.os.Build.VERSION.SDK_INT >= 31) REQUIRED_PERMISSIONS + Manifest.permission.BLUETOOTH_CONNECT else REQUIRED_PERMISSIONS
+
 const val DISPLAY_ALL = "all"
 const val DISPLAY_CUSTOM = "custom"
 
@@ -135,8 +139,22 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private fun granted(p: String) = ContextCompat.checkSelfPermission(app, p) == PackageManager.PERMISSION_GRANTED
 
+    /** Whether Bluetooth device names can be read (always true before Android 12, which needs no permission). */
+    var btGranted by mutableStateOf(android.os.Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT))
+        private set
+
+    /** Turns the experimental Bluetooth-names switch on or off. */
+    var bluetoothNames by mutableStateOf(prefs.bluetoothNames)
+        private set
+    fun updateBluetoothNames(on: Boolean) {
+        prefs.bluetoothNames = on
+        bluetoothNames = on
+        io.github.amandhakar.contacts.call.AudioRoutes.showNames = on
+    }
+
     /** Called on start and after the permission dialog. */
     fun onPermissions() {
+        btGranted = android.os.Build.VERSION.SDK_INT < 31 || granted(Manifest.permission.BLUETOOTH_CONNECT)
         permissionsOk = granted(Manifest.permission.READ_CONTACTS) && granted(Manifest.permission.READ_CALL_LOG) &&
             granted(Manifest.permission.CALL_PHONE)
         refreshRole()

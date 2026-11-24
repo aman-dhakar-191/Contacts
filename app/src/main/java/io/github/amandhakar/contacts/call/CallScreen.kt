@@ -37,7 +37,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -124,6 +127,14 @@ fun CallScreen(onClose: () -> Unit) {
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
             Spacer(Modifier.height(8.dp))
             Text(statusText(shown, primary == null, now), color = Color(0xFFB0B8C0), fontSize = 18.sp)
+            // Where the audio is going, when it is not the phone's own earpiece (Bluetooth, wired headset, speaker).
+            if (primary != null && primary.state != Call.STATE_RINGING && audio?.route != null && audio?.route != CallAudioState.ROUTE_EARPIECE) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(routeIcon(audio?.route), null, tint = Color(0xFF7DFFA0), modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(AudioRoutes.currentLabel(audio), color = Color(0xFF7DFFA0), fontSize = 14.sp)
+                }
+            }
             shown.tag?.let { t ->
                 Spacer(Modifier.height(10.dp))
                 io.github.amandhakar.contacts.ui.CategoryBadge(t.name, t.color, Modifier.clickable { reportWrong = true })
@@ -164,13 +175,42 @@ fun CallScreen(onClose: () -> Unit) {
                 }
             } else if (primary != null) {
                 val muted = audio?.isMuted == true
-                val speaker = audio?.route == CallAudioState.ROUTE_SPEAKER
+                val routes = AudioRoutes.available(audio)
+                var routeMenu by remember { mutableStateOf(false) }
+                val onPhone = audio?.route == CallAudioState.ROUTE_EARPIECE || audio?.route == null
                 val held = primary.state == Call.STATE_HOLDING
                 // Both rows use three equal columns (an empty cell where a button is missing) so the buttons line up.
                 Row(Modifier.fillMaxWidth()) {
                     Cell { ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted) { CallHub.setMuted(!muted) } }
                     Cell { ToggleButton(Icons.Filled.Dialpad, "Keypad", false) { showKeypad = true } }
-                    Cell { ToggleButton(Icons.Filled.VolumeUp, "Speaker", speaker) { CallHub.setSpeaker(!speaker) } }
+                    Cell {
+                        Box {
+                            // One audio button: with only phone + speaker it toggles; with a headset or Bluetooth it opens a list.
+                            ToggleButton(
+                                routeIcon(audio?.route),
+                                when (audio?.route) {
+                                    CallAudioState.ROUTE_BLUETOOTH -> "Bluetooth"
+                                    CallAudioState.ROUTE_WIRED_HEADSET -> "Headset"
+                                    CallAudioState.ROUTE_SPEAKER -> "Speaker"
+                                    else -> "Audio"
+                                },
+                                !onPhone,
+                            ) {
+                                if (routes.size <= 2) {
+                                    CallHub.setSpeaker(audio?.route != CallAudioState.ROUTE_SPEAKER)
+                                } else routeMenu = true
+                            }
+                            androidx.compose.material3.DropdownMenu(expanded = routeMenu, onDismissRequest = { routeMenu = false }) {
+                                routes.forEach { r ->
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(r.label, fontWeight = if (r.route == audio?.route) androidx.compose.ui.text.font.FontWeight.Bold else null) },
+                                        leadingIcon = { Icon(routeIcon(r.route), null) },
+                                        onClick = { routeMenu = false; CallHub.setRoute(r.route) },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth()) {
@@ -215,7 +255,7 @@ fun CallScreen(onClose: () -> Unit) {
     }
 }
 
-/** In-call keypad: the same keys as the dialer, shows what you have pressed, and matches contacts by those digits. */
+/** In-call keypad: the dialer's own display, match cards and keys. Pressed keys are sent as tones. */
 @Composable
 private fun InCallKeypad(call: Call, onClose: () -> Unit) {
     val ctx = LocalContext.current
@@ -230,52 +270,58 @@ private fun InCallKeypad(call: Call, onClose: () -> Unit) {
             contacts = c; phones = p
         }
     }
-    val hits = remember(typed, contacts, phones) {
-        if (typed.length < 2 || !typed.all { it.isDigit() }) emptyList()
-        else contacts.flatMap { c ->
-            val nameHit = io.github.amandhakar.contacts.util.T9.matches(c.name, typed)
-            phones[c.id].orEmpty()
-                .filter { nameHit || io.github.amandhakar.contacts.util.PhoneUtil.digits(it.number).contains(typed) }
-                .map { c to it }
-        }.take(3)
+    val hits = remember(typed, contacts, phones) { io.github.amandhakar.contacts.ui.dialHits(typed, contacts, phones, 3) }
+    val clip = io.github.amandhakar.contacts.ui.rememberClipboardNumber()
+
+    suspend fun tone(ch: Char) {
+        call.playDtmfTone(ch); delay(150); call.stopDtmfTone(); delay(90)
     }
-    AlertDialog(
+
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
-        dismissButton = if (typed.isNotEmpty()) ({ TextButton(onClick = { typed = "" }) { Text("Clear") } }) else null,
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    typed.ifEmpty { "Tap keys to send tones" },
-                    fontSize = if (typed.isEmpty()) 14.sp else if (typed.length > 12) 22.sp else 30.sp,
-                    color = if (typed.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1, textAlign = TextAlign.Center,
-                    modifier = Modifier.height(40.dp).padding(top = 6.dp),
-                )
-                // Contacts that match the digits (shown for reference; tapping does not dial).
-                Column(Modifier.height(54.dp)) {
-                    hits.forEach { (c, p) ->
-                        Text(
-                            "${c.name} · ${p.number}", fontSize = 12.sp, maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        androidx.compose.material3.Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(0.94f),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 14.dp)) {
+                // Matching contacts, in the same cards as the dialer (room for three so the keys do not jump).
+                Column(
+                    Modifier.padding(horizontal = 12.dp).height(180.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                ) {
+                    hits.forEach { (c, p) -> io.github.amandhakar.contacts.ui.DialMatchRow(c, p, onClick = null) }
                 }
-                for (row in io.github.amandhakar.contacts.ui.KEYS) {
-                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                        for ((d, letters) in row) {
-                            io.github.amandhakar.contacts.ui.Key(d, letters, size = 62.dp, onClick = {
-                                typed += d
-                                call.playDtmfTone(d[0])
-                                scope.launch { delay(150); call.stopDtmfTone() }
-                            })
-                        }
-                    }
+                Box(Modifier.height(64.dp), contentAlignment = Alignment.Center) {
+                    io.github.amandhakar.contacts.ui.DialNumberDisplay(
+                        typed, "Tap keys to send tones", clip,
+                        // A pasted number is shown and sent as tones, one digit at a time (e.g. a meeting PIN).
+                        onPaste = { pasted ->
+                            typed += pasted
+                            scope.launch { pasted.forEach { if (it in "0123456789*#") tone(it) } }
+                        },
+                    )
+                }
+                io.github.amandhakar.contacts.ui.DialKeyGrid(keySize = 68.dp, spacing = 18.dp, onKey = { d ->
+                    typed += d
+                    scope.launch { tone(d[0]) }
+                })
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                    if (typed.isNotEmpty()) TextButton(onClick = { typed = "" }) { Text("Clear") }
+                    TextButton(onClick = onClose) { Text("Close") }
                 }
             }
-        },
-    )
+        }
+    }
+}
+
+private fun routeIcon(route: Int?): ImageVector = when (route) {
+    CallAudioState.ROUTE_SPEAKER -> Icons.Filled.VolumeUp
+    CallAudioState.ROUTE_BLUETOOTH -> Icons.Filled.Bluetooth
+    CallAudioState.ROUTE_WIRED_HEADSET -> Icons.Filled.Headset
+    else -> Icons.Filled.PhoneInTalk
 }
 
 private fun statusText(info: CallInfo, ended: Boolean, now: Long): String {

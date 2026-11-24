@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
             ContactsTheme {
                 AppRoot(
                     vm,
-                    requestPermissions = { permLauncher.launch(REQUIRED_PERMISSIONS) },
+                    requestPermissions = { permLauncher.launch(permissionsToRequest(vm.bluetoothNames)) },
                     requestDefaultDialer = {
                         val rm = getSystemService(RoleManager::class.java)
                         if (rm.isRoleAvailable(RoleManager.ROLE_DIALER)) roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER))

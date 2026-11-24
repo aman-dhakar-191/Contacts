@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Experimental: lets the call screen show the name of the connected Bluetooth device. Can be turned off in Settings. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Android 16 live updates: lets the ongoing call notification be shown as a status-bar chip / island. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />

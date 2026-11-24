@@ -7,6 +7,7 @@ class ContactsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        io.github.amandhakar.contacts.call.AudioRoutes.showNames = io.github.amandhakar.contacts.data.Prefs(this).bluetoothNames
         io.github.amandhakar.contacts.util.Telemetry.init(this)
     }
 }
