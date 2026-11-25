@@ -119,7 +119,7 @@ class CallService : InCallService() {
         val calls = CallHub.calls.value
         val ringing = calls.firstOrNull { it.state == Call.STATE_RINGING }
         if (ringing != null) {
-            val key = "${System.identityHashCode(ringing.call)}:${ringing.name}:${ringing.tag?.name}"
+            val key = "${System.identityHashCode(ringing.call)}:${ringing.name}:${ringing.callerAlert?.alert}:${ringing.tag?.name}"
             if (key != incomingShown) { incomingShown = key; Notifications.incoming(this, ringing) }
         } else if (incomingShown != null) {
             incomingShown = null

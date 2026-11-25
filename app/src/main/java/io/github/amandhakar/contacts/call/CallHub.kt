@@ -6,6 +6,8 @@ import android.telecom.InCallService
 import android.telecom.VideoProfile
 import io.github.amandhakar.contacts.data.CallerInfo
 import io.github.amandhakar.contacts.identifier.Tag
+import io.github.amandhakar.contacts.util.CallerLabel
+import io.github.amandhakar.contacts.util.CallerLabels
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
@@ -22,12 +24,19 @@ data class CallInfo(
     val tag: Tag? = null,
     /** The name is only a guess from caller ID (or one remembered from an earlier call), not a saved contact. */
     val nameFromCallerId: Boolean = false,
+    /** A warning the carrier put inside the caller-ID name ("Vi Alert: Spam ..."), split off from the name. */
+    val callerAlert: CallerLabel? = null,
 )
 
-/** What to call the caller in text: the name, or the number; a name that is only a caller-ID guess gets "(likely)" after it. */
+/**
+ * What to call the caller in text: the name, or the number; a name that is only a caller-ID guess gets "(likely)" after it,
+ * and a carrier warning goes in front ("Spam: REENA PATEL (likely)").
+ */
 fun CallInfo.displayName(): String {
     val base = name ?: number.ifBlank { "Unknown" }
-    return if (nameFromCallerId && name != null) "$base (likely)" else base
+    val guessed = if (nameFromCallerId && name != null) "$base (likely)" else base
+    val warn = callerAlert?.alertShort
+    return if (warn != null) "$warn: $guessed" else guessed
 }
 
 /** The calls Android Telecom is currently showing us, as snapshots the UI can observe. */
@@ -71,7 +80,11 @@ object CallHub {
             val d = c.details
             val number = d.handle?.schemeSpecificPart ?: ""
             val caller = callers[c]
-            val shownName = caller?.name ?: d.callerDisplayName?.takeIf { it.isNotBlank() } ?: rememberedName?.invoke(number)
+            // A saved contact's name is used as it is. A caller-ID name (or one remembered from an earlier call) is
+            // split into the name and any carrier warning written into it.
+            val idName = if (caller != null) null
+                else (d.callerDisplayName?.takeIf { it.isNotBlank() } ?: rememberedName?.invoke(number))?.let { CallerLabels.parse(it) }
+            val shownName = caller?.name ?: idName?.name
             CallInfo(
                 call = c, number = number,
                 name = shownName,
@@ -81,6 +94,7 @@ object CallHub {
                 connectTimeMillis = d.connectTimeMillis,
                 tag = tags[c],
                 nameFromCallerId = caller == null && shownName != null,
+                callerAlert = idName?.takeIf { it.hasAlert },
             )
         }
     }
