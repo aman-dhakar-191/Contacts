@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -159,7 +160,9 @@ fun SwipeActionRow(
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
     val context = LocalContext.current
     val thresholdPercent = remember(context) { Prefs(context).swipeActionThresholdPercent }
-    val commitThresholdPx = revealPx * (thresholdPercent / 100f)
+    var rowWidthPx by remember { mutableFloatStateOf(0f) }
+    var gestureDistance by remember { mutableFloatStateOf(0f) }
+    val commitThresholdPx = rowWidthPx * (thresholdPercent / 100f)
     val edgeGuardPx = with(LocalDensity.current) { edgeGuard.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
@@ -172,13 +175,13 @@ fun SwipeActionRow(
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
     val threshold = commitThresholdPx
     // Past the threshold, letting go runs the action: say so with colour and a short tick.
-    val rightArmed by remember(threshold) { derivedStateOf { dragOffset >= threshold } }
-    val leftArmed by remember(threshold) { derivedStateOf { dragOffset <= -threshold } }
+    val rightArmed by remember(threshold) { derivedStateOf { gestureDistance >= threshold } }
+    val leftArmed by remember(threshold) { derivedStateOf { gestureDistance <= -threshold } }
     LaunchedEffect(rightArmed, leftArmed) {
         if (rightArmed || leftArmed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().onSizeChanged { rowWidthPx = it.width.toFloat() }) {
         Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
             if (swipeRight != SwipeAction.NONE) {
                 SwipeActionSlot(swipeRight, rightArmed, Modifier.width(revealWidth))
@@ -203,20 +206,24 @@ fun SwipeActionRow(
                             if (gestureEligible) {
                                 returnJob?.cancel()
                                 dragging = true
+                                gestureDistance = 0f
                             }
                         },
                         onHorizontalDrag = { change, amount ->
                             if (gestureEligible) {
                                 change.consume()
+                                gestureDistance = (gestureDistance + amount).coerceIn(-size.width.toFloat(), size.width.toFloat())
                                 dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
                             }
                         },
                         onDragEnd = {
                             if (gestureEligible) {
                                 val completedOffset = dragOffset
+                                val completedDistance = gestureDistance
+                                gestureDistance = 0f
                                 dragging = false
                                 returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
-                                if (abs(completedOffset) >= threshold) {
+                                if (abs(completedDistance) >= threshold) {
                                     if (completedOffset > 0f) latestOnSwipeRight()
                                     else latestOnSwipeLeft()
                                 }
@@ -226,6 +233,7 @@ fun SwipeActionRow(
                         onDragCancel = {
                             if (gestureEligible) {
                                 dragging = false
+                                gestureDistance = 0f
                                 returnJob = scope.launch { animate(dragOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
                             }
                             gestureEligible = false
