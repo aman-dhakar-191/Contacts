@@ -62,7 +62,7 @@ object Notifications {
 
     fun incoming(ctx: Context, info: CallInfo) {
         if (!canPost(ctx)) return
-        val who = info.name ?: info.number.ifBlank { "Unknown" }
+        val who = info.displayName()
         // The category goes in the headline (the part of a call popup that is always shown), not only the small text.
         val label = info.tag?.let { "${it.name} · $who" } ?: who
         val decline = PendingIntent.getBroadcast(
@@ -94,7 +94,7 @@ object Notifications {
      */
     fun ongoing(ctx: Context, info: CallInfo, otherCalls: Int, speakerOn: Boolean, muted: Boolean, route: String? = null) {
         if (!canPost(ctx)) return
-        val label = info.name ?: info.number.ifBlank { "Unknown" }
+        val label = info.displayName()
         val live = info.state == android.telecom.Call.STATE_ACTIVE && info.connectTimeMillis > 0
         // The island / pill draws the title, so the title is the short state: "Calling…" before it is answered,
         // then the running timer (CallService re-posts every second). The name and category go on the second line.
@@ -192,9 +192,9 @@ object Notifications {
     fun cancelIncoming(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_INCOMING)
     fun cancelOngoing(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_ONGOING)
 
-    fun missed(ctx: Context, number: String, name: String?) {
+    fun missed(ctx: Context, number: String, name: String?, likely: Boolean = false) {
         if (!canPost(ctx)) return
-        val label = name ?: number.ifBlank { "Unknown" }
+        val label = (name ?: number.ifBlank { "Unknown" }) + if (likely && name != null) " (likely)" else ""
         val open = PendingIntent.getActivity(
             ctx, 20, Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_HISTORY, true),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

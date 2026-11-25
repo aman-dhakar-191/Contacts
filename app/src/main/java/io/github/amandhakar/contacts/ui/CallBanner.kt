@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import io.github.amandhakar.contacts.call.CallInfo
 import io.github.amandhakar.contacts.call.InCallActivity
 import io.github.amandhakar.contacts.call.callStatusLabel
+import io.github.amandhakar.contacts.call.displayName
 import kotlinx.coroutines.delay
 
 /** Shown at the top of the app while a call is going on or ringing, so the call can always be found again. Tap to return to it. */
@@ -48,7 +49,7 @@ fun CallBanner(info: CallInfo) {
         Row(Modifier.statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Call, null, Modifier.size(20.dp), tint = fg)
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(info.name ?: info.number.ifBlank { "Unknown" }, color = fg, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(info.displayName(), color = fg, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(callStatusLabel(info.state, seconds) + (info.tag?.let { " · ${it.name}" } ?: ""), color = fg, style = MaterialTheme.typography.bodySmall)
             }
             Text("Tap to return", color = fg, style = MaterialTheme.typography.labelLarge)

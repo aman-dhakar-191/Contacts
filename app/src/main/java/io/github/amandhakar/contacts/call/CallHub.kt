@@ -20,7 +20,15 @@ data class CallInfo(
     val connectTimeMillis: Long,
     /** Category given by the identifier, if it is on and something matched. */
     val tag: Tag? = null,
+    /** The name is only a guess from caller ID (or one remembered from an earlier call), not a saved contact. */
+    val nameFromCallerId: Boolean = false,
 )
+
+/** What to call the caller in text: the name, or the number; a name that is only a caller-ID guess gets "(likely)" after it. */
+fun CallInfo.displayName(): String {
+    val base = name ?: number.ifBlank { "Unknown" }
+    return if (nameFromCallerId && name != null) "$base (likely)" else base
+}
 
 /** The calls Android Telecom is currently showing us, as snapshots the UI can observe. */
 object CallHub {
@@ -63,14 +71,16 @@ object CallHub {
             val d = c.details
             val number = d.handle?.schemeSpecificPart ?: ""
             val caller = callers[c]
+            val shownName = caller?.name ?: d.callerDisplayName?.takeIf { it.isNotBlank() } ?: rememberedName?.invoke(number)
             CallInfo(
                 call = c, number = number,
-                name = caller?.name ?: d.callerDisplayName?.takeIf { it.isNotBlank() } ?: rememberedName?.invoke(number),
+                name = shownName,
                 photoUri = caller?.photoUri,
                 state = c.state,
                 incoming = d.callDirection == Call.Details.DIRECTION_INCOMING,
                 connectTimeMillis = d.connectTimeMillis,
                 tag = tags[c],
+                nameFromCallerId = caller == null && shownName != null,
             )
         }
     }

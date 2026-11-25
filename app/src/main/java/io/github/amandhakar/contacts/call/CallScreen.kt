@@ -125,6 +125,12 @@ fun CallScreen(onClose: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             Text(shown.name ?: shown.number.ifBlank { "Unknown" }, color = Color.White, fontSize = 30.sp, textAlign = TextAlign.Center)
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
+            if (shown.nameFromCallerId) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    io.github.amandhakar.contacts.ui.LikelyChip()
+                    Text("  name from caller ID, not in your contacts", color = Color(0xFF8A939B), fontSize = 12.sp)
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(statusText(shown, primary == null, now), color = Color(0xFFB0B8C0), fontSize = 18.sp)
             // Where the audio is going, when it is not the phone's own earpiece (Bluetooth, wired headset, speaker).
@@ -163,7 +169,7 @@ fun CallScreen(onClose: () -> Unit) {
             if (other != null && primary != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "${other.name ?: other.number} is " + if (other.state == Call.STATE_HOLDING) "on hold" else "calling",
+                    "${other.displayName()} is " + if (other.state == Call.STATE_HOLDING) "on hold" else "calling",
                     color = Color(0xFFFFCC80), fontSize = 14.sp,
                 )
             }

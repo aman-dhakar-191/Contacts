@@ -61,6 +61,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
         Screen.Recordings -> "recordings"
         Screen.Merge -> "merge"
         Screen.RecordTest -> "recording_test"
+        Screen.CallInfo -> "call_info"
         Screen.RecordList -> "autorecord_list"
         Screen.Accounts -> "accounts"
         Screen.Identifier -> "identifier"
@@ -93,6 +94,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
                     Screen.Recordings -> RecordingsScreen(vm)
                     Screen.Merge -> MergeScreen(vm)
                     Screen.RecordTest -> RecordingTestScreen(vm)
+                    Screen.CallInfo -> CallInfoScreen(vm)
                     Screen.RecordList -> RecordListScreen(vm)
                     Screen.Accounts -> AccountsScreen(vm)
                     Screen.Identifier -> IdentifierScreen(vm)
