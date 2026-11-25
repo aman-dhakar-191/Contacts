@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.data.SwipeAction
+import io.github.amandhakar.contacts.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -154,10 +155,10 @@ fun SwipeActionRow(
 ) {
     // A deliberate, longer swipe avoids accidental actions during edge-navigation gestures.
     val revealWidth = 144.dp
-    val commitThreshold = 112.dp
     val edgeGuard = 32.dp
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
-    val commitThresholdPx = with(LocalDensity.current) { commitThreshold.toPx() }
+    val thresholdPercent = remember { Prefs(LocalContext.current).swipeActionThresholdPercent }
+    val commitThresholdPx = revealPx * (thresholdPercent / 100f)
     val edgeGuardPx = with(LocalDensity.current) { edgeGuard.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
