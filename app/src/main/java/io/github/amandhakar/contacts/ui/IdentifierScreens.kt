@@ -99,6 +99,15 @@ fun CategoryChip(name: String, color: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/** Marks a name that is only a guess from caller ID (not one of your saved contacts), like Google's "Maybe". */
+@Composable
+fun LikelyChip(modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme.tertiary
+    Surface(modifier, shape = RoundedCornerShape(8.dp), color = c.copy(alpha = 0.18f)) {
+        Text("Likely", Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = c, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
+
 /** A large solid label for the call screen, where the category has to be seen at a glance. */
 @Composable
 fun CategoryBadge(name: String, color: Int, modifier: Modifier = Modifier) {

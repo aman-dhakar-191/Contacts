@@ -127,9 +127,10 @@ fun RecentsTab(vm: AppViewModel) {
                 }
                 items(list, key = { it.id }) { e ->
                     val contact = index[PhoneUtil.key(e.number)]
-                    val name = contact?.name ?: e.cachedName?.takeIf { it.isNotBlank() }
-                        ?: remembered?.get(e.number) ?: e.number.ifBlank { "Unknown" }
-                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id])
+                    val guessed = if (contact == null) e.cachedName?.takeIf { it.isNotBlank() } ?: remembered?.get(e.number) else null
+                    val name = contact?.name ?: guessed ?: e.number.ifBlank { "Unknown" }
+                    // A name that is not from a saved contact (call-log cache or caller ID) gets a "Likely" chip.
+                    CallRow(vm, e, name, contact?.id, contact?.photoUri, contact?.starred ?: false, tags[e.id], likely = guessed != null)
                 }
             }
         }
@@ -137,7 +138,7 @@ fun RecentsTab(vm: AppViewModel) {
 }
 
 @Composable
-private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, tag: io.github.amandhakar.contacts.identifier.Tag?) {
+private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Long?, photo: String?, starred: Boolean, tag: io.github.amandhakar.contacts.identifier.Tag?, likely: Boolean = false) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var flagging by remember { mutableStateOf(false) }
@@ -193,6 +194,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
                             name, style = MaterialTheme.typography.bodyLarge, color = if (missed) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                         )
+                        if (likely) LikelyChip(Modifier.padding(start = 8.dp))
                         if (tag != null) CategoryChip(tag.name, tag.color, Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
