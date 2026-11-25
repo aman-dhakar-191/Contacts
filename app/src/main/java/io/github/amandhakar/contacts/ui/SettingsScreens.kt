@@ -261,9 +261,9 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
             GroupCard {
                 var swipeThresholdPercent by remember { mutableStateOf(vm.prefs.swipeActionThresholdPercent.toFloat()) }
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text("Swipe action sensitivity", style = MaterialTheme.typography.titleSmall)
+                    Text("Swipe length to execute", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "${swipeThresholdPercent.toInt()}% of the reveal distance · higher values require a longer swipe",
+                        "${swipeThresholdPercent.toInt()}% of the full contact row width · higher values require a longer swipe",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
