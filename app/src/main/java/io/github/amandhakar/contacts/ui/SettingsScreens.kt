@@ -58,6 +58,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -258,6 +259,22 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
 
             SectionLabel("Experimental")
             GroupCard {
+                var swipeThresholdPercent by remember { mutableStateOf(vm.prefs.swipeActionThresholdPercent.toFloat()) }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("Swipe action sensitivity", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${swipeThresholdPercent.toInt()}% of the reveal distance · higher values require a longer swipe",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = swipeThresholdPercent,
+                        onValueChange = { swipeThresholdPercent = it },
+                        onValueChangeFinished = { vm.prefs.swipeActionThresholdPercent = swipeThresholdPercent.toInt() },
+                        valueRange = 30f..90f,
+                        steps = 5,
+                    )
+                }
                 InfoRow(
                     Icons.Filled.Science, "Bluetooth device names",
                     if (!vm.bluetoothNames) "Off · calls just say \"Bluetooth\""
