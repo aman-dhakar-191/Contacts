@@ -52,7 +52,7 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         val cb = object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) = handleState(call, state)
-            override fun onDetailsChanged(call: Call, details: Call.Details) { rememberCallerName(call); CallHub.refresh(); updateNotifications() }
+            override fun onDetailsChanged(call: Call, details: Call.Details) { rememberCallerName(call); CallInfoLog.record(applicationContext, call); CallHub.refresh(); updateNotifications() }
         }
         call.registerCallback(cb)
         callbacks[call] = cb
@@ -60,6 +60,7 @@ class CallService : InCallService() {
         Telemetry.event("call_added", "incoming" to (call.details.callDirection == Call.Details.DIRECTION_INCOMING))
 
         rememberCallerName(call)
+        CallInfoLog.record(applicationContext, call)
         val number = call.details.handle?.schemeSpecificPart ?: ""
         val incomingCall = call.details.callDirection == Call.Details.DIRECTION_INCOMING
         scope.launch {
@@ -98,6 +99,7 @@ class CallService : InCallService() {
         updateNotifications()
 
         val cause = call.details.disconnectCause?.code
+        CallInfoLog.recordEnd(applicationContext, call, call.details.disconnectCause?.let { "${it.code} ${it.reason ?: ""}".trim() })
         if (info != null && info.incoming && !wasAnswered && cause == DisconnectCause.MISSED) {
             Telemetry.event("call_missed")
             Notifications.missed(this, info.number, info.name, info.nameFromCallerId)

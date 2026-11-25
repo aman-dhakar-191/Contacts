@@ -266,6 +266,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                     onClick = { vm.updateBluetoothNames(!vm.bluetoothNames) },
                     trailing = { Switch(vm.bluetoothNames, { vm.updateBluetoothNames(it) }) },
                 )
+                InfoRow(Icons.Filled.Science, "Call info", "See everything Android tells this app about your calls: names, private numbers, SIM, location and more", onClick = { vm.push(Screen.CallInfo) })
                 var rememberNames by remember { mutableStateOf(vm.prefs.rememberCallerNames) }
                 var rememberedCount by remember { mutableStateOf(io.github.amandhakar.contacts.data.CallerNames(ctx).count()) }
                 InfoRow(

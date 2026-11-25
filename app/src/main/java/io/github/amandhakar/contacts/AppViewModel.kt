@@ -43,6 +43,7 @@ sealed interface Screen {
     data object Recordings : Screen
     data object Merge : Screen
     data object RecordTest : Screen
+    data object CallInfo : Screen
     data object RecordList : Screen
     data object Accounts : Screen
     data object Identifier : Screen
