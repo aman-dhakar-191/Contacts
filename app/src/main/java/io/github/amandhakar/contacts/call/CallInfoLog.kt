@@ -121,7 +121,6 @@ object CallInfoLog {
     private fun properties(p: Int): String {
         val names = buildList {
             if (p and Call.Details.PROPERTY_CONFERENCE != 0) add("conference")
-            if (p and Call.Details.PROPERTY_EMERGENCY_CALL != 0) add("emergency")
             if (p and Call.Details.PROPERTY_HIGH_DEF_AUDIO != 0) add("HD audio")
             if (p and Call.Details.PROPERTY_WIFI != 0) add("Wi-Fi calling")
             if (p and Call.Details.PROPERTY_SELF_MANAGED != 0) add("self managed")
