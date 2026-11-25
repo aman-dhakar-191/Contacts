@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.SwapCalls
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -123,7 +124,13 @@ fun CallScreen(onClose: () -> Unit) {
             Spacer(Modifier.height(40.dp))
             Avatar(shown.name ?: shown.number, shown.photoUri, 112.dp)
             Spacer(Modifier.height(20.dp))
-            Text(shown.name ?: shown.number.ifBlank { "Unknown" }, color = Color.White, fontSize = 30.sp, textAlign = TextAlign.Center)
+            shown.callerAlert?.alert?.let { CallerAlertChip(it); Spacer(Modifier.height(12.dp)) }
+            // Explicit lineHeight: without it a long name that wraps inherits a smaller line height from the theme and the lines overlap.
+            Text(
+                shown.name ?: shown.number.ifBlank { "Unknown" }, color = Color.White,
+                fontSize = 30.sp, lineHeight = 36.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
             if (shown.nameFromCallerId) {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -258,6 +265,21 @@ fun CallScreen(onClose: () -> Unit) {
 
     if (showKeypad && primary != null) {
         InCallKeypad(primary.call) { showKeypad = false }
+    }
+}
+
+/** The carrier's warning about the caller ("Vi Alert · Spam"), kept out of the name so the name stays short. */
+@Composable
+private fun CallerAlertChip(text: String) {
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        color = Color(0xFFD32F2F).copy(alpha = 0.22f),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Warning, null, tint = Color(0xFFFF8A80), modifier = Modifier.size(16.dp))
+            Spacer(Modifier.size(6.dp))
+            Text(text, color = Color(0xFFFF8A80), fontSize = 14.sp, maxLines = 1)
+        }
     }
 }
 
