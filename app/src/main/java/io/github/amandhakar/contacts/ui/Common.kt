@@ -152,8 +152,13 @@ fun SwipeActionRow(
     onSwipeRight: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val revealWidth = 88.dp
+    // A deliberate, longer swipe avoids accidental actions during edge-navigation gestures.
+    val revealWidth = 144.dp
+    val commitThreshold = 112.dp
+    val edgeGuard = 32.dp
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
+    val commitThresholdPx = with(LocalDensity.current) { commitThreshold.toPx() }
+    val edgeGuardPx = with(LocalDensity.current) { edgeGuard.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -163,7 +168,7 @@ fun SwipeActionRow(
     val latestOnSwipeRight by rememberUpdatedState(onSwipeRight)
     val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
     val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
-    val threshold = revealPx * 0.42f
+    val threshold = commitThresholdPx
     // Past the threshold, letting go runs the action: say so with colour and a short tick.
     val rightArmed by remember(threshold) { derivedStateOf { dragOffset >= threshold } }
     val leftArmed by remember(threshold) { derivedStateOf { dragOffset <= -threshold } }
@@ -187,28 +192,41 @@ fun SwipeActionRow(
                 // otherwise it stays in place and hides the action panes behind it.
                 .offset { IntOffset(dragOffset.roundToInt(), 0) }
                 .background(MaterialTheme.colorScheme.surface)
-                .pointerInput(swipeLeft, swipeRight, revealPx) {
+                .pointerInput(swipeLeft, swipeRight, revealPx, commitThresholdPx, edgeGuardPx) {
+                    var gestureEligible = false
                     detectHorizontalDragGestures(
-                        onDragStart = {
-                            returnJob?.cancel()   // grabbing the row while it is still sliding back
-                            dragging = true
-                        },
-                        onHorizontalDrag = { change, amount ->
-                            change.consume()
-                            dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
-                        },
-                        onDragEnd = {
-                            val completedOffset = dragOffset
-                            dragging = false
-                            returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(160)) { v, _ -> dragOffset = v } }
-                            if (abs(completedOffset) >= threshold) {
-                                if (completedOffset > 0f) latestOnSwipeRight()
-                                else latestOnSwipeLeft()
+                        onDragStart = { start ->
+                            // Do not interpret Android's left/right system-edge gestures as row actions.
+                            gestureEligible = start.x > edgeGuardPx && start.x < size.width - edgeGuardPx
+                            if (gestureEligible) {
+                                returnJob?.cancel()
+                                dragging = true
                             }
                         },
+                        onHorizontalDrag = { change, amount ->
+                            if (gestureEligible) {
+                                change.consume()
+                                dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
+                            }
+                        },
+                        onDragEnd = {
+                            if (gestureEligible) {
+                                val completedOffset = dragOffset
+                                dragging = false
+                                returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
+                                if (abs(completedOffset) >= threshold) {
+                                    if (completedOffset > 0f) latestOnSwipeRight()
+                                    else latestOnSwipeLeft()
+                                }
+                            }
+                            gestureEligible = false
+                        },
                         onDragCancel = {
-                            dragging = false
-                            returnJob = scope.launch { animate(dragOffset, 0f, animationSpec = tween(160)) { v, _ -> dragOffset = v } }
+                            if (gestureEligible) {
+                                dragging = false
+                                returnJob = scope.launch { animate(dragOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
+                            }
+                            gestureEligible = false
                         },
                     )
                 },
