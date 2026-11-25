@@ -24,6 +24,12 @@ data class CallInfo(
     val nameFromCallerId: Boolean = false,
 )
 
+/** What to call the caller in text: the name, or the number; a name that is only a caller-ID guess gets "(likely)" after it. */
+fun CallInfo.displayName(): String {
+    val base = name ?: number.ifBlank { "Unknown" }
+    return if (nameFromCallerId && name != null) "$base (likely)" else base
+}
+
 /** The calls Android Telecom is currently showing us, as snapshots the UI can observe. */
 object CallHub {
     /** Looks up a caller-ID name remembered from an earlier call (set by the call service). */

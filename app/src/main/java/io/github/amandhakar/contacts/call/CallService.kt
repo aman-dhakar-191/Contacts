@@ -100,7 +100,7 @@ class CallService : InCallService() {
         val cause = call.details.disconnectCause?.code
         if (info != null && info.incoming && !wasAnswered && cause == DisconnectCause.MISSED) {
             Telemetry.event("call_missed")
-            Notifications.missed(this, info.number, info.name)
+            Notifications.missed(this, info.number, info.name, info.nameFromCallerId)
         }
         if (CallHub.calls.value.isEmpty()) RecorderService.stop(this)
     }

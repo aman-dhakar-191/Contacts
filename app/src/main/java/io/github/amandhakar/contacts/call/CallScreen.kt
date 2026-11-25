@@ -169,7 +169,7 @@ fun CallScreen(onClose: () -> Unit) {
             if (other != null && primary != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "${other.name ?: other.number} is " + if (other.state == Call.STATE_HOLDING) "on hold" else "calling",
+                    "${other.displayName()} is " + if (other.state == Call.STATE_HOLDING) "on hold" else "calling",
                     color = Color(0xFFFFCC80), fontSize = 14.sp,
                 )
             }
