@@ -223,9 +223,10 @@ fun SwipeActionRow(
                                 gestureDistance = 0f
                                 dragging = false
                                 returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
-                                if (abs(completedDistance) >= threshold) {
-                                    if (completedOffset > 0f) latestOnSwipeRight()
-                                    else latestOnSwipeLeft()
+                                if (completedDistance >= threshold && swipeRight != SwipeAction.NONE) {
+                                    latestOnSwipeRight()
+                                } else if (completedDistance <= -threshold && swipeLeft != SwipeAction.NONE) {
+                                    latestOnSwipeLeft()
                                 }
                             }
                             gestureEligible = false
