@@ -157,7 +157,8 @@ fun SwipeActionRow(
     val revealWidth = 144.dp
     val edgeGuard = 32.dp
     val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
-    val thresholdPercent = remember { Prefs(LocalContext.current).swipeActionThresholdPercent }
+    val context = LocalContext.current
+    val thresholdPercent = remember(context) { Prefs(context).swipeActionThresholdPercent }
     val commitThresholdPx = revealPx * (thresholdPercent / 100f)
     val edgeGuardPx = with(LocalDensity.current) { edgeGuard.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
