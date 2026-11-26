@@ -2,7 +2,7 @@
 
 package io.github.amandhakar.contacts.ui
 
-import android.content.Intent
+import java.io.File
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -52,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,14 +67,15 @@ import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 private enum class CustomizationTab { Appearance, Advanced }
 
 @Composable
 fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
     val ctx = LocalContext.current
-    var backgroundUri by remember(contactId) { mutableStateOf(contactId?.let { vm.prefs.contactCallerBackgroundUri(it) }) }
-    var fallbackPhotoUri by remember(contactId) { mutableStateOf(contactId?.let { vm.prefs.contactCallerPhotoUri(it) }) }
+    var backgroundUri by remember(contactId) { mutableStateOf(if (contactId != null) vm.prefs.contactCallerBackgroundUri(contactId) else vm.prefs.callerBackgroundUri) }
+    var fallbackPhotoUri by remember(contactId) { mutableStateOf(if (contactId != null) vm.prefs.contactCallerPhotoUri(contactId) else vm.prefs.callerFallbackPhotoUri) }
     var showCallLabel by remember { mutableStateOf(vm.prefs.callerShowCallLabel) }
     var nameSize by remember { mutableStateOf(vm.prefs.callerNameSizeSp.toFloat()) }
     var accentColor by remember { mutableStateOf(vm.prefs.callerAccentColor) }
@@ -81,22 +83,43 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
     var tab by remember { mutableStateOf(CustomizationTab.Appearance) }
     var accentMenu by remember { mutableStateOf(false) }
     var buttonMenu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    fun keepUri(uri: Uri): String {
-        try { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
-        return uri.toString()
+    suspend fun copyImageIntoApp(uri: Uri, kind: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val directory = File(ctx.filesDir, "caller-images").apply { mkdirs() }
+            val target = File(directory, if (contactId == null) "global-$kind.img" else "contact-$contactId-$kind.img")
+            val temporary = File(directory, target.name + ".tmp")
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                temporary.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@withContext null
+            if (target.exists()) target.delete()
+            if (!temporary.renameTo(target)) {
+                temporary.copyTo(target, overwrite = true)
+                temporary.delete()
+            }
+            Uri.fromFile(target).toString()
+        } catch (_: Exception) { null }
     }
 
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            backgroundUri = keepUri(uri)
-            contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, backgroundUri) }
+        if (uri != null) scope.launch {
+            val saved = copyImageIntoApp(uri, "background")
+            if (saved != null) {
+                backgroundUri = saved
+                if (contactId != null) vm.prefs.setContactCallerBackgroundUri(contactId, saved)
+                else vm.prefs.callerBackgroundUri = saved
+            }
         }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            fallbackPhotoUri = keepUri(uri)
-            contactId?.let { vm.prefs.setContactCallerPhotoUri(it, fallbackPhotoUri) }
+        if (uri != null) scope.launch {
+            val saved = copyImageIntoApp(uri, "photo")
+            if (saved != null) {
+                fallbackPhotoUri = saved
+                if (contactId != null) vm.prefs.setContactCallerPhotoUri(contactId, saved)
+                else vm.prefs.callerFallbackPhotoUri = saved
+            }
         }
     }
 
@@ -137,9 +160,12 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
                         TextButton(onClick = {
                             backgroundUri = null
                             fallbackPhotoUri = null
-                            contactId?.let {
-                                vm.prefs.setContactCallerBackgroundUri(it, null)
-                                vm.prefs.setContactCallerPhotoUri(it, null)
+                            if (contactId != null) {
+                                vm.prefs.setContactCallerBackgroundUri(contactId, null)
+                                vm.prefs.setContactCallerPhotoUri(contactId, null)
+                            } else {
+                                vm.prefs.callerBackgroundUri = null
+                                vm.prefs.callerFallbackPhotoUri = null
                             }
                         }) { Icon(Icons.Filled.RestartAlt, null); Text("Reset contact images") }
                     }
