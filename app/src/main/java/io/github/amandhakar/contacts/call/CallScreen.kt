@@ -118,7 +118,6 @@ fun CallScreen(onClose: () -> Unit) {
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg)) {
         io.github.amandhakar.contacts.ui.CallerScreenBackdrop(callerPrefs.callerBackgroundUri)
-        Box(Modifier.fillMaxSize().background(Color(0x6608100D)))
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         if (shown == null) return@Box
         androidx.compose.material3.TextButton(onClick = { showTest = true }, modifier = Modifier.align(Alignment.TopEnd)) {
@@ -254,7 +253,6 @@ fun CallScreen(onClose: () -> Unit) {
         }
     }
 
-        }
     }
 
     if (showTest) {
