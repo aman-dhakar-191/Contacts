@@ -192,6 +192,15 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 InfoRow(Icons.Filled.Tune, "Account sync settings", onClick = { ctx.startActivity(Intent(Settings.ACTION_SYNC_SETTINGS)) })
             }
 
+            SectionLabel("Caller screen")
+            GroupCard {
+                InfoRow(
+                    Icons.Filled.Tune, "Caller screen customization",
+                    "Choose a wallpaper, default contact image and call information options",
+                    onClick = { vm.push(Screen.CallerCustomization) },
+                )
+            }
+
             SectionLabel("Call recording")
             GroupCard {
                 InfoRow(Icons.Filled.Mic, "Record all calls", "Start recording as soon as a call connects",
