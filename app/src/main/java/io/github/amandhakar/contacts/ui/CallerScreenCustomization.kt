@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -156,7 +157,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                 GroupCard {
                     InfoRow(
                         androidx.compose.material.icons.Icons.Filled.Label, "Show call category",
-                        "Show labels such as Personal or Work when available",
+                        "Show caller-ID category tags when available",
                         onClick = { showCallLabel = !showCallLabel; vm.prefs.callerShowCallLabel = showCallLabel },
                         trailing = {
                             androidx.compose.material3.Switch(
