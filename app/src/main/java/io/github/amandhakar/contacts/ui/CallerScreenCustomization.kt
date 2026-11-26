@@ -113,6 +113,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
                         contactId?.let { vm.prefs.setContactCallerPhotoUri(it, null) }
                     })
                 }
+                if (contactId == null) {
                 SectionLabel("Name & number style")
                 GroupCard {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -173,6 +174,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
                         },
                     )
                 }
+                }
                 SectionLabel("Preview")
                 Box(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(300.dp)
@@ -202,18 +204,22 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
                     onClick = {
                         backgroundUri = null
                         fallbackPhotoUri = null
-                        showCallLabel = true
-                        nameSize = 30f
-                        accentColor = "#7DFFA0"
-                        buttonStyle = "circle"
-                        contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, null); vm.prefs.setContactCallerPhotoUri(it, null) }
-                        vm.prefs.callerShowCallLabel = true
-                        vm.prefs.callerNameSizeSp = 30
-                        vm.prefs.callerAccentColor = "#7DFFA0"
-                        vm.prefs.callerButtonStyle = "circle"
+                        contactId?.let {
+                            vm.prefs.setContactCallerBackgroundUri(it, null)
+                            vm.prefs.setContactCallerPhotoUri(it, null)
+                        } ?: run {
+                            showCallLabel = true
+                            nameSize = 30f
+                            accentColor = "#7DFFA0"
+                            buttonStyle = "circle"
+                            vm.prefs.callerShowCallLabel = true
+                            vm.prefs.callerNameSizeSp = 30
+                            vm.prefs.callerAccentColor = "#7DFFA0"
+                            vm.prefs.callerButtonStyle = "circle"
+                        }
                     },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) { Text("Reset all customizations") }
+                ) { Text(if (contactId == null) "Reset appearance settings" else "Reset images for this contact") }
             }
         }
     }
