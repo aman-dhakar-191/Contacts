@@ -197,7 +197,7 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                 InfoRow(
                     Icons.Filled.Tune, "Caller screen customization",
                     "Choose a wallpaper, default contact image and call information options",
-                    onClick = { vm.push(Screen.CallerCustomization) },
+                    onClick = { vm.push(Screen.CallerCustomization()) },
                 )
             }
 
