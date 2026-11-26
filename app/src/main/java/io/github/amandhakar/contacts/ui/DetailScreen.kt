@@ -122,6 +122,15 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                 ActionButton(Icons.Filled.Edit, "Edit") { vm.push(Screen.Edit(d.id)) }
             }
 
+            GroupCard(Modifier.padding(top = 18.dp)) {
+                InfoRow(
+                    androidx.compose.material.icons.Icons.Filled.Tune,
+                    "Caller screen customization",
+                    "Customize the background and default caller image",
+                    onClick = { vm.push(Screen.CallerCustomization) },
+                )
+            }
+
             if (d.phones.isNotEmpty()) {
                 SectionLabel("Phone")
                 GroupCard {
