@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package io.github.amandhakar.contacts.ui
 
 import android.content.Intent
@@ -6,46 +8,65 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Label
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.Alignment
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private enum class CustomizationTab { Appearance, Advanced }
 
 @Composable
 fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
@@ -56,13 +77,12 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
     var nameSize by remember { mutableStateOf(vm.prefs.callerNameSizeSp.toFloat()) }
     var accentColor by remember { mutableStateOf(vm.prefs.callerAccentColor) }
     var buttonStyle by remember { mutableStateOf(vm.prefs.callerButtonStyle) }
+    var tab by remember { mutableStateOf(CustomizationTab.Appearance) }
     var accentMenu by remember { mutableStateOf(false) }
     var buttonMenu by remember { mutableStateOf(false) }
 
     fun keepUri(uri: Uri): String {
-        try {
-            ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Exception) { }
+        try { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
         return uri.toString()
     }
 
@@ -79,161 +99,190 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
         }
     }
 
-    Page(if (contactId == null) "Caller screen customization" else "Caller screen · contact", vm) { pad ->
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(Modifier)
-                .padding(pad),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 28.dp),
+    Page(if (contactId == null) "Caller screen customization" else "Caller screen customization", vm) { pad ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(pad),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Text(
-                    if (contactId == null) "Customize the global call-screen layout. Background and profile images are configured separately for each contact." else "Choose images used only when calling this contact. Other contacts keep their own images.",
-                    Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                CallerMiniPreview(
+                    backgroundUri = backgroundUri,
+                    photoUri = fallbackPhotoUri,
+                    nameSize = nameSize,
+                    showCallLabel = showCallLabel,
                 )
-                SectionLabel("Appearance")
-                GroupCard {
-                    if (contactId != null) InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Image, "Background image",
-                        if (backgroundUri == null) "Use a photo or wallpaper behind call controls" else "Custom background selected",
-                        onClick = { backgroundPicker.launch(arrayOf("image/*")) },
-                    )
-                    if (backgroundUri != null) InfoRow(null, "Remove background", "Return to the original dark gradient", onClick = {
-                        backgroundUri = null
-                        contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, null) }
-                    })
-                    if (contactId != null) InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Person, "Caller profile image",
-                        if (fallbackPhotoUri == null) "Used when a caller has no contact photo" else "Custom fallback image selected",
-                        onClick = { photoPicker.launch(arrayOf("image/*")) },
-                    )
-                    if (fallbackPhotoUri != null) InfoRow(null, "Remove default image", "Return to generated initials", onClick = {
-                        fallbackPhotoUri = null
-                        contactId?.let { vm.prefs.setContactCallerPhotoUri(it, null) }
-                    })
-                }
-                if (contactId == null) {
-                SectionLabel("Name & number style")
-                GroupCard {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Text("Caller name size · ${nameSize.toInt()} sp", style = MaterialTheme.typography.titleSmall)
-                        Slider(
-                            value = nameSize, onValueChange = { nameSize = it },
-                            onValueChangeFinished = { vm.prefs.callerNameSizeSp = nameSize.toInt() },
-                            valueRange = 24f..36f,
-                        )
-                    }
-                    InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Palette, "Accent color",
-                        "Used for active call controls and highlights",
-                        trailing = {
-                            Box {
-                                OutlinedButton(onClick = { accentMenu = true }) { Text(accentLabel(accentColor)) }
-                                DropdownMenu(expanded = accentMenu, onDismissRequest = { accentMenu = false }) {
-                                    listOf("#7DFFA0" to "Mint", "#80B8FF" to "Blue", "#D7A0FF" to "Purple", "#FFB86B" to "Amber").forEach { (hex, label) ->
-                                        DropdownMenuItem(text = { Text(label) }, onClick = {
-                                            accentColor = hex
-                                            vm.prefs.callerAccentColor = hex
-                                            accentMenu = false
-                                        })
-                                    }
-                                }
-                            }
-                        },
-                    )
-                    InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Dashboard, "Button style",
-                        "Choose circular or rounded-square controls",
-                        trailing = {
-                            Box {
-                                OutlinedButton(onClick = { buttonMenu = true }) { Text(if (buttonStyle == "rounded") "Rounded" else "Circular") }
-                                DropdownMenu(expanded = buttonMenu, onDismissRequest = { buttonMenu = false }) {
-                                    DropdownMenuItem(text = { Text("Circular") }, onClick = {
-                                        buttonStyle = "circle"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false
-                                    })
-                                    DropdownMenuItem(text = { Text("Rounded") }, onClick = {
-                                        buttonStyle = "rounded"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false
-                                    })
-                                }
-                            }
-                        },
-                    )
-                }
-                SectionLabel("Call information")
-                GroupCard {
-                    InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Label, "Show call category",
-                        "Show caller-ID category tags when available",
-                        onClick = { showCallLabel = !showCallLabel; vm.prefs.callerShowCallLabel = showCallLabel },
-                        trailing = {
-                            androidx.compose.material3.Switch(
-                                checked = showCallLabel,
-                                onCheckedChange = { showCallLabel = it; vm.prefs.callerShowCallLabel = it },
-                            )
-                        },
-                    )
-                }
-                }
-                SectionLabel("Preview")
-                Box(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(300.dp)
-                        .clip(RoundedCornerShape(28.dp)).background(Color(0xFF14231D)),
-                ) {
-                    CallerScreenBackdrop(backgroundUri)
-                    Column(
-                        Modifier.fillMaxSize().padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                    ) {
-                        Avatar("Aman Dhaker", fallbackPhotoUri, 88.dp)
-                        Spacer(Modifier.height(14.dp))
-                        Text("Aman Dhaker", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontSize = nameSize.sp)
-                        Text("9660617067", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFD0D8D3))
-                        if (showCallLabel) {
-                            androidx.compose.material3.Surface(
-                                color = Color(0xFF2E8B45), shape = RoundedCornerShape(24.dp),
-                                modifier = Modifier.padding(top = 10.dp),
-                            ) { Text("Personal", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Color.White) }
-                        }
-                        Text("Calling…", Modifier.padding(top = 14.dp), color = Color.White)
-                        Text("●     ⠿     ◖", Modifier.padding(top = 28.dp), color = Color.White)
+            }
+            item {
+                TabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    CustomizationTab.entries.forEach { item ->
+                        Tab(selected = tab == item, onClick = { tab = item }, text = { Text(item.name) })
                     }
                 }
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        backgroundUri = null
-                        fallbackPhotoUri = null
-                        contactId?.let {
-                            vm.prefs.setContactCallerBackgroundUri(it, null)
-                            vm.prefs.setContactCallerPhotoUri(it, null)
-                        } ?: run {
-                            showCallLabel = true
-                            nameSize = 30f
-                            accentColor = "#7DFFA0"
-                            buttonStyle = "circle"
-                            vm.prefs.callerShowCallLabel = true
-                            vm.prefs.callerNameSizeSp = 30
-                            vm.prefs.callerAccentColor = "#7DFFA0"
-                            vm.prefs.callerButtonStyle = "circle"
+            }
+            if (tab == CustomizationTab.Appearance) {
+                item {
+                    Text("Personalize the look of your caller screen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CustomizationGroup {
+                        CustomizationRow(Icons.Filled.Image, "Background", if (backgroundUri == null) "Set a custom image or wallpaper" else "Custom wallpaper selected") {
+                            backgroundPicker.launch(arrayOf("image/*"))
                         }
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) { Text(if (contactId == null) "Reset appearance settings" else "Reset images for this contact") }
+                        CustomizationDivider()
+                        CustomizationRow(Icons.Filled.Person, "Contact image", if (fallbackPhotoUri == null) "Choose the photo shown on the caller screen" else "Custom caller image selected") {
+                            photoPicker.launch(arrayOf("image/*"))
+                        }
+                    }
+                    if (backgroundUri != null || fallbackPhotoUri != null) {
+                        TextButton(onClick = {
+                            backgroundUri = null
+                            fallbackPhotoUri = null
+                            contactId?.let {
+                                vm.prefs.setContactCallerBackgroundUri(it, null)
+                                vm.prefs.setContactCallerPhotoUri(it, null)
+                            }
+                        }) { Icon(Icons.Filled.RestartAlt, null); Text("Reset contact images") }
+                    }
+                    if (contactId == null) {
+                        Text("Images are saved separately for each contact from that contact's details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text("These images apply only to this contact. Other contacts are unchanged.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                item {
+                    Text("These options apply globally to all calls.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CustomizationGroup {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.TextFields, tint = MaterialTheme.colorScheme.primary, contentDescription = null)
+                                Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                                    Text("Name & number style", style = MaterialTheme.typography.titleMedium)
+                                    Text("Caller name size · ${nameSize.toInt()} sp", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Slider(value = nameSize, onValueChange = { nameSize = it }, onValueChangeFinished = { vm.prefs.callerNameSizeSp = nameSize.toInt() }, valueRange = 24f..36f)
+                        }
+                        CustomizationDivider()
+                        CustomizationRow(Icons.Filled.Label, "Call info tag", "Show or hide caller category labels") {
+                            showCallLabel = !showCallLabel
+                            vm.prefs.callerShowCallLabel = showCallLabel
+                        }
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.weight(1f))
+                            Switch(checked = showCallLabel, onCheckedChange = { showCallLabel = it; vm.prefs.callerShowCallLabel = it })
+                        }
+                        CustomizationDivider()
+                        CustomizationRow(Icons.Filled.Dashboard, "Button style", "Choose circular or rounded-square controls") {
+                            buttonMenu = true
+                        }
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.CenterEnd) {
+                            OutlinedButton(onClick = { buttonMenu = true }) { Text(if (buttonStyle == "rounded") "Rounded" else "Circular") }
+                            DropdownMenu(expanded = buttonMenu, onDismissRequest = { buttonMenu = false }) {
+                                DropdownMenuItem(text = { Text("Circular") }, onClick = { buttonStyle = "circle"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false })
+                                DropdownMenuItem(text = { Text("Rounded") }, onClick = { buttonStyle = "rounded"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false })
+                            }
+                        }
+                        CustomizationDivider()
+                        CustomizationRow(Icons.Filled.ColorLens, "Color & theme", "Accent color for controls and highlights") {
+                            accentMenu = true
+                        }
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.CenterEnd) {
+                            OutlinedButton(onClick = { accentMenu = true }) { Text(accentLabel(accentColor)) }
+                            DropdownMenu(expanded = accentMenu, onDismissRequest = { accentMenu = false }) {
+                                listOf("#7DFFA0" to "Mint", "#80B8FF" to "Blue", "#D7A0FF" to "Purple", "#FFB86B" to "Amber").forEach { (hex, label) ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = { accentColor = hex; vm.prefs.callerAccentColor = hex; accentMenu = false })
+                                }
+                            }
+                        }
+                    }
+                    TextButton(onClick = {
+                        showCallLabel = true
+                        nameSize = 30f
+                        accentColor = "#7DFFA0"
+                        buttonStyle = "circle"
+                        vm.prefs.callerShowCallLabel = true
+                        vm.prefs.callerNameSizeSp = 30
+                        vm.prefs.callerAccentColor = "#7DFFA0"
+                        vm.prefs.callerButtonStyle = "circle"
+                    }) { Icon(Icons.Filled.RestartAlt, null); Text("Reset advanced settings") }
+                }
             }
         }
     }
 }
 
-/** Optional wallpaper layer for the live call UI. Invalid or revoked image URIs fall back safely. */
+@Composable
+private fun CustomizationGroup(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) { Column(content = { content() }) }
+}
+
+@Composable
+private fun CustomizationDivider() {
+    androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+}
+
+@Composable
+private fun CustomizationRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.clickable
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(26.dp), tint = MaterialTheme.colorScheme.primary)
+        Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.0f))
+        OutlinedButton(onClick = onClick) { Text("Set") }
+    }
+}
+
+@Composable
+private fun CallerMiniPreview(
+    backgroundUri: String?,
+    photoUri: String?,
+    nameSize: Float,
+    showCallLabel: Boolean,
+) {
+    Box(
+        Modifier.fillMaxWidth().height(236.dp).clip(RoundedCornerShape(26.dp)).background(Color(0xFF14231D)),
+        contentAlignment = Alignment.Center,
+    ) {
+        CallerScreenBackdrop(backgroundUri)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Avatar("Aman Dhaker", photoUri, 64.dp)
+            Spacer(Modifier.height(8.dp))
+            Text("Aman Dhaker", color = Color.White, fontSize = (nameSize * 0.72f).sp, fontWeight = FontWeight.Medium)
+            Text("9660617067", color = Color(0xFFD0D8D3), style = MaterialTheme.typography.bodySmall)
+            if (showCallLabel) {
+                Surface(color = Color(0xFF2E8B45), shape = RoundedCornerShape(20.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Personal", Modifier.padding(horizontal = 14.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Text("Calling…", Modifier.padding(top = 8.dp), color = Color.White)
+            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                listOf("●", "⠿", "◖").forEach { Text(it, color = Color.White, style = MaterialTheme.typography.titleMedium) }
+            }
+        }
+    }
+}
+
 @Composable
 fun CallerScreenBackdrop(uri: String?) {
     val context = LocalContext.current
     val bitmap by produceState<Bitmap?>(null, uri) {
         value = if (uri.isNullOrBlank()) null else withContext(Dispatchers.IO) {
-            try {
-                context.contentResolver.openInputStream(Uri.parse(uri))?.use { BitmapFactory.decodeStream(it) }
-            } catch (_: Exception) { null }
+            try { context.contentResolver.openInputStream(Uri.parse(uri))?.use { BitmapFactory.decodeStream(it) } } catch (_: Exception) { null }
         }
     }
     val image = bitmap
