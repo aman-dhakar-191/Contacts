@@ -89,6 +89,8 @@ fun CallScreen(onClose: () -> Unit) {
     val recLabel by RecorderState.sourceLabel.collectAsState()
     val recReason by RecorderState.reason.collectAsState()
     val callerPrefs = remember(ctx) { io.github.amandhakar.contacts.data.Prefs(ctx) }
+    val callerAccent = remember(callerPrefs.callerAccentColor) { runCatching { Color(android.graphics.Color.parseColor(callerPrefs.callerAccentColor)) }.getOrDefault(Color(0xFF7DFFA0)) }
+    val roundedControls = callerPrefs.callerButtonStyle == "rounded"
     var showTest by remember { mutableStateOf(false) }
     var reportWrong by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -131,7 +133,7 @@ fun CallScreen(onClose: () -> Unit) {
             // Explicit lineHeight: without it a long name that wraps inherits a smaller line height from the theme and the lines overlap.
             Text(
                 shown.name ?: shown.number.ifBlank { "Unknown" }, color = Color.White,
-                fontSize = 30.sp, lineHeight = 36.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                fontSize = callerPrefs.callerNameSizeSp.sp, lineHeight = (callerPrefs.callerNameSizeSp + 6).sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
             )
             if (shown.name != null && shown.number.isNotBlank()) Text(shown.number, color = Color(0xFFB0B8C0), fontSize = 16.sp)
@@ -146,9 +148,9 @@ fun CallScreen(onClose: () -> Unit) {
             // Where the audio is going, when it is not the phone's own earpiece (Bluetooth, wired headset, speaker).
             if (primary != null && primary.state != Call.STATE_RINGING && audio?.route != null && audio?.route != CallAudioState.ROUTE_EARPIECE) {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(routeIcon(audio?.route), null, tint = Color(0xFF7DFFA0), modifier = Modifier.size(16.dp))
+                    Icon(routeIcon(audio?.route), null, tint = callerAccent, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text(AudioRoutes.currentLabel(audio), color = Color(0xFF7DFFA0), fontSize = 14.sp)
+                    Text(AudioRoutes.currentLabel(audio), color = callerAccent, fontSize = 14.sp)
                 }
             }
             if (callerPrefs.callerShowCallLabel) shown.tag?.let { t ->
@@ -197,8 +199,8 @@ fun CallScreen(onClose: () -> Unit) {
                 val held = primary.state == Call.STATE_HOLDING
                 // Both rows use three equal columns (an empty cell where a button is missing) so the buttons line up.
                 Row(Modifier.fillMaxWidth()) {
-                    Cell { ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted) { CallHub.setMuted(!muted) } }
-                    Cell { ToggleButton(Icons.Filled.Dialpad, "Keypad", false) { showKeypad = true } }
+                    Cell { ToggleButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", muted, callerAccent, roundedControls) { CallHub.setMuted(!muted) } }
+                    Cell { ToggleButton(Icons.Filled.Dialpad, "Keypad", false, callerAccent, roundedControls) { showKeypad = true } }
                     Cell {
                         Box {
                             // One audio button: with only phone + speaker it toggles; with a headset or Bluetooth it opens a list.
@@ -210,7 +212,7 @@ fun CallScreen(onClose: () -> Unit) {
                                     CallAudioState.ROUTE_SPEAKER -> "Speaker"
                                     else -> "Audio"
                                 },
-                                !onPhone,
+                                !onPhone, callerAccent, roundedControls,
                             ) {
                                 if (routes.size <= 2) {
                                     CallHub.setSpeaker(audio?.route != CallAudioState.ROUTE_SPEAKER)
@@ -230,15 +232,15 @@ fun CallScreen(onClose: () -> Unit) {
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth()) {
-                    Cell { ToggleButton(Icons.Filled.Pause, "Hold", held) { if (held) CallHub.unhold(primary.call) else CallHub.hold(primary.call) } }
+                    Cell { ToggleButton(Icons.Filled.Pause, "Hold", held, callerAccent, roundedControls) { if (held) CallHub.unhold(primary.call) else CallHub.hold(primary.call) } }
                     Cell {
-                        ToggleButton(Icons.Filled.FiberManualRecord, "Record", recording) {
+                        ToggleButton(Icons.Filled.FiberManualRecord, "Record", recording, callerAccent, roundedControls) {
                             if (recording) RecorderService.stop(ctx) else { RecorderState.reason.value = null; RecorderService.start(ctx, primary.number, primary.incoming) }
                         }
                     }
                     Cell {
                         if (other != null) {
-                            ToggleButton(Icons.Filled.SwapCalls, "Swap", false) {
+                            ToggleButton(Icons.Filled.SwapCalls, "Swap", false, callerAccent, roundedControls) {
                                 if (other.state == Call.STATE_HOLDING) CallHub.unhold(other.call) else CallHub.hold(primary.call)
                             }
                         }
@@ -379,12 +381,12 @@ private fun RowScope.Cell(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ToggleButton(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
+private fun ToggleButton(icon: ImageVector, label: String, on: Boolean, activeColor: Color = Color.White, rounded: Boolean = false, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(width = 84.dp, height = 90.dp)) {
         Box(
-            Modifier.size(64.dp).clip(CircleShape).background(if (on) Color.White else Color(0xFF26352E)).clickable(onClick = onClick),
+            Modifier.size(64.dp).clip(if (rounded) androidx.compose.foundation.shape.RoundedCornerShape(20.dp) else CircleShape).background(if (on) activeColor else Color(0xFF26352E)).clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(28.dp)) }
+        ) { Icon(icon, label, tint = if (on) Color(0xFF0B100E) else Color.White, modifier = Modifier.size(28.dp)) }
         Spacer(Modifier.height(4.dp))
         Text(label, color = Color(0xFFB0B8C0), fontSize = 12.sp)
     }
