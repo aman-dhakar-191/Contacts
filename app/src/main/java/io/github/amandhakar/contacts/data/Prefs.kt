@@ -28,6 +28,11 @@ class Prefs(ctx: Context) {
         get() = SwipeAction.fromStringOrDefault(sp.getString("swipe_right_action", "call"), "call")
         set(v) = sp.edit().putString("swipe_right_action", v.key).apply()
 
+    /** Percentage of the full contact row width required to execute a swipe action. */
+    var swipeActionThresholdPercent: Int
+        get() = sp.getInt("swipe_action_threshold_percent", 60).coerceIn(30, 90)
+        set(v) = sp.edit().putInt("swipe_action_threshold_percent", v.coerceIn(30, 90)).apply()
+
     var autoRecord: Boolean
         get() = sp.getBoolean("auto_record", false)
         set(v) = sp.edit().putBoolean("auto_record", v).apply()
