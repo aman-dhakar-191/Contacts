@@ -5,6 +5,8 @@ package io.github.amandhakar.contacts.ui
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.content.Context
+import java.io.File
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.amandhakar.contacts.AppViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class CustomizationTab { Appearance, Advanced }
@@ -81,22 +85,37 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
     var tab by remember { mutableStateOf(CustomizationTab.Appearance) }
     var accentMenu by remember { mutableStateOf(false) }
     var buttonMenu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    fun keepUri(uri: Uri): String {
-        try { ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
-        return uri.toString()
+    suspend fun copyImageIntoAppStorage(uri: Uri, kind: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val folder = File(ctx.filesDir, "caller_images").apply { mkdirs() }
+            val target = File(folder, "contact_${contactId ?: "global"}_${kind}.img")
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@withContext null
+            Uri.fromFile(target).toString()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            backgroundUri = keepUri(uri)
-            contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, backgroundUri) }
+        if (uri != null) scope.launch {
+            val savedUri = copyImageIntoAppStorage(uri, "background")
+            if (savedUri != null) {
+                backgroundUri = savedUri
+                contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, savedUri) }
+            }
         }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            fallbackPhotoUri = keepUri(uri)
-            contactId?.let { vm.prefs.setContactCallerPhotoUri(it, fallbackPhotoUri) }
+        if (uri != null) scope.launch {
+            val savedUri = copyImageIntoAppStorage(uri, "photo")
+            if (savedUri != null) {
+                fallbackPhotoUri = savedUri
+                contactId?.let { vm.prefs.setContactCallerPhotoUri(it, savedUri) }
+            }
         }
     }
 
