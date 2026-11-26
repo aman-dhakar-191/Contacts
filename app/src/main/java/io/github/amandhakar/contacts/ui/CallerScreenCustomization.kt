@@ -48,10 +48,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun CallerScreenCustomizationScreen(vm: AppViewModel) {
+fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
     val ctx = LocalContext.current
-    var backgroundUri by remember { mutableStateOf(vm.prefs.callerBackgroundUri) }
-    var fallbackPhotoUri by remember { mutableStateOf(vm.prefs.callerFallbackPhotoUri) }
+    var backgroundUri by remember(contactId) { mutableStateOf(contactId?.let { vm.prefs.contactCallerBackgroundUri(it) }) }
+    var fallbackPhotoUri by remember(contactId) { mutableStateOf(contactId?.let { vm.prefs.contactCallerPhotoUri(it) }) }
     var showCallLabel by remember { mutableStateOf(vm.prefs.callerShowCallLabel) }
     var nameSize by remember { mutableStateOf(vm.prefs.callerNameSizeSp.toFloat()) }
     var accentColor by remember { mutableStateOf(vm.prefs.callerAccentColor) }
@@ -69,17 +69,17 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
     val backgroundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             backgroundUri = keepUri(uri)
-            vm.prefs.callerBackgroundUri = backgroundUri
+            contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, backgroundUri) }
         }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             fallbackPhotoUri = keepUri(uri)
-            vm.prefs.callerFallbackPhotoUri = fallbackPhotoUri
+            contactId?.let { vm.prefs.setContactCallerPhotoUri(it, fallbackPhotoUri) }
         }
     }
 
-    Page("Caller screen customization", vm) { pad ->
+    Page(if (contactId == null) "Caller screen customization" else "Caller screen · contact", vm) { pad ->
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(Modifier)
                 .padding(pad),
@@ -87,32 +87,33 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
         ) {
             item {
                 Text(
-                    "Personalize the screen shown while calls are ringing or connected. Changes are optional; your current layout stays the default until you choose something.",
+                    if (contactId == null) "Customize the global call-screen layout. Background and profile images are configured separately for each contact." else "Choose images used only when calling this contact. Other contacts keep their own images.",
                     Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 SectionLabel("Appearance")
                 GroupCard {
-                    InfoRow(
+                    if (contactId != null) InfoRow(
                         androidx.compose.material.icons.Icons.Filled.Image, "Background image",
                         if (backgroundUri == null) "Use a photo or wallpaper behind call controls" else "Custom background selected",
                         onClick = { backgroundPicker.launch(arrayOf("image/*")) },
                     )
                     if (backgroundUri != null) InfoRow(null, "Remove background", "Return to the original dark gradient", onClick = {
                         backgroundUri = null
-                        vm.prefs.callerBackgroundUri = null
+                        contactId?.let { vm.prefs.setContactCallerBackgroundUri(it, null) }
                     })
-                    InfoRow(
-                        androidx.compose.material.icons.Icons.Filled.Person, "Default contact image",
+                    if (contactId != null) InfoRow(
+                        androidx.compose.material.icons.Icons.Filled.Person, "Caller profile image",
                         if (fallbackPhotoUri == null) "Used when a caller has no contact photo" else "Custom fallback image selected",
                         onClick = { photoPicker.launch(arrayOf("image/*")) },
                     )
                     if (fallbackPhotoUri != null) InfoRow(null, "Remove default image", "Return to generated initials", onClick = {
                         fallbackPhotoUri = null
-                        vm.prefs.callerFallbackPhotoUri = null
+                        contactId?.let { vm.prefs.setContactCallerPhotoUri(it, null) }
                     })
                 }
+                if (contactId == null) {
                 SectionLabel("Name & number style")
                 GroupCard {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -173,6 +174,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                         },
                     )
                 }
+                }
                 SectionLabel("Preview")
                 Box(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(300.dp)
@@ -202,19 +204,22 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                     onClick = {
                         backgroundUri = null
                         fallbackPhotoUri = null
-                        showCallLabel = true
-                        nameSize = 30f
-                        accentColor = "#7DFFA0"
-                        buttonStyle = "circle"
-                        vm.prefs.callerBackgroundUri = null
-                        vm.prefs.callerFallbackPhotoUri = null
-                        vm.prefs.callerShowCallLabel = true
-                        vm.prefs.callerNameSizeSp = 30
-                        vm.prefs.callerAccentColor = "#7DFFA0"
-                        vm.prefs.callerButtonStyle = "circle"
+                        contactId?.let {
+                            vm.prefs.setContactCallerBackgroundUri(it, null)
+                            vm.prefs.setContactCallerPhotoUri(it, null)
+                        } ?: run {
+                            showCallLabel = true
+                            nameSize = 30f
+                            accentColor = "#7DFFA0"
+                            buttonStyle = "circle"
+                            vm.prefs.callerShowCallLabel = true
+                            vm.prefs.callerNameSizeSp = 30
+                            vm.prefs.callerAccentColor = "#7DFFA0"
+                            vm.prefs.callerButtonStyle = "circle"
+                        }
                     },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) { Text("Reset all customizations") }
+                ) { Text(if (contactId == null) "Reset appearance settings" else "Reset images for this contact") }
             }
         }
     }

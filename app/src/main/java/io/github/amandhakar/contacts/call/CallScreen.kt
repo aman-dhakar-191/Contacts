@@ -119,7 +119,9 @@ fun CallScreen(onClose: () -> Unit) {
 
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg)) {
-        io.github.amandhakar.contacts.ui.CallerScreenBackdrop(callerPrefs.callerBackgroundUri)
+        val contactBackground = shown?.contactId?.let { callerPrefs.contactCallerBackgroundUri(it) }
+        val contactPhoto = shown?.contactId?.let { callerPrefs.contactCallerPhotoUri(it) }
+        io.github.amandhakar.contacts.ui.CallerScreenBackdrop(contactBackground)
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         if (shown == null) return@Box
         androidx.compose.material3.TextButton(onClick = { showTest = true }, modifier = Modifier.align(Alignment.TopEnd)) {
@@ -127,7 +129,7 @@ fun CallScreen(onClose: () -> Unit) {
         }
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(40.dp))
-            Avatar(shown.name ?: shown.number, shown.photoUri ?: callerPrefs.callerFallbackPhotoUri, 112.dp)
+            Avatar(shown.name ?: shown.number, contactPhoto ?: shown.photoUri, 112.dp)
             Spacer(Modifier.height(20.dp))
             shown.callerAlert?.alert?.let { CallerAlertChip(it); Spacer(Modifier.height(12.dp)) }
             // Explicit lineHeight: without it a long name that wraps inherits a smaller line height from the theme and the lines overlap.

@@ -42,6 +42,27 @@ class Prefs(ctx: Context) {
         get() = sp.getString("caller_fallback_photo_uri", null)
         set(v) = sp.edit().putString("caller_fallback_photo_uri", v).apply()
 
+    /** Per-contact caller-screen images, keyed by the Android Contacts contact ID. */
+    fun contactCallerBackgroundUri(contactId: Long): String? =
+        sp.getString("contact_caller_bg_$contactId", null)
+
+    fun setContactCallerBackgroundUri(contactId: Long, uri: String?) {
+        sp.edit().apply {
+            if (uri == null) remove("contact_caller_bg_$contactId")
+            else putString("contact_caller_bg_$contactId", uri)
+        }.apply()
+    }
+
+    fun contactCallerPhotoUri(contactId: Long): String? =
+        sp.getString("contact_caller_photo_$contactId", null)
+
+    fun setContactCallerPhotoUri(contactId: Long, uri: String?) {
+        sp.edit().apply {
+            if (uri == null) remove("contact_caller_photo_$contactId")
+            else putString("contact_caller_photo_$contactId", uri)
+        }.apply()
+    }
+
     var callerShowCallLabel: Boolean
         get() = sp.getBoolean("caller_show_call_label", true)
         set(v) = sp.edit().putBoolean("caller_show_call_label", v).apply()
