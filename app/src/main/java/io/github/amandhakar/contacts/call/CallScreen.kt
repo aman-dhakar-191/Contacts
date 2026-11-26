@@ -88,6 +88,7 @@ fun CallScreen(onClose: () -> Unit) {
     val recWarning by RecorderState.warning.collectAsState()
     val recLabel by RecorderState.sourceLabel.collectAsState()
     val recReason by RecorderState.reason.collectAsState()
+    val callerPrefs = remember(ctx) { io.github.amandhakar.contacts.data.Prefs(ctx) }
     var showTest by remember { mutableStateOf(false) }
     var reportWrong by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -115,14 +116,17 @@ fun CallScreen(onClose: () -> Unit) {
     }
 
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
-    Box(Modifier.fillMaxSize().background(bg).safeDrawingPadding()) {
+    Box(Modifier.fillMaxSize().background(bg)) {
+        io.github.amandhakar.contacts.ui.CallerScreenBackdrop(callerPrefs.callerBackgroundUri)
+        Box(Modifier.fillMaxSize().background(Color(0x6608100D)))
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         if (shown == null) return@Box
         androidx.compose.material3.TextButton(onClick = { showTest = true }, modifier = Modifier.align(Alignment.TopEnd)) {
             Text("Rec test", color = Color(0xFFB0B8C0))
         }
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(40.dp))
-            Avatar(shown.name ?: shown.number, shown.photoUri, 112.dp)
+            Avatar(shown.name ?: shown.number, shown.photoUri ?: callerPrefs.callerFallbackPhotoUri, 112.dp)
             Spacer(Modifier.height(20.dp))
             shown.callerAlert?.alert?.let { CallerAlertChip(it); Spacer(Modifier.height(12.dp)) }
             // Explicit lineHeight: without it a long name that wraps inherits a smaller line height from the theme and the lines overlap.
@@ -148,7 +152,7 @@ fun CallScreen(onClose: () -> Unit) {
                     Text(AudioRoutes.currentLabel(audio), color = Color(0xFF7DFFA0), fontSize = 14.sp)
                 }
             }
-            shown.tag?.let { t ->
+            if (callerPrefs.callerShowCallLabel) shown.tag?.let { t ->
                 Spacer(Modifier.height(10.dp))
                 io.github.amandhakar.contacts.ui.CategoryBadge(t.name, t.color, Modifier.clickable { reportWrong = true })
                 Text(
@@ -247,6 +251,9 @@ fun CallScreen(onClose: () -> Unit) {
             } else {
                 Spacer(Modifier.height(100.dp))
             }
+        }
+    }
+
         }
     }
 
