@@ -128,7 +128,7 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                     androidx.compose.material.icons.Icons.Filled.Tune,
                     "Caller screen customization",
                     "Customize the background and default caller image",
-                    onClick = { vm.push(Screen.CallerCustomization) },
+                    onClick = { vm.push(Screen.CallerCustomization(d.id)) },
                 )
             }
 
