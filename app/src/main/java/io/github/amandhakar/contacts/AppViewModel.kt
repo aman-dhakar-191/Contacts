@@ -39,7 +39,7 @@ sealed interface Screen {
     data class Detail(val id: Long) : Screen
     data class Edit(val id: Long?, val number: String? = null) : Screen
     data object Settings : Screen
-    data object CallerCustomization : Screen
+    data class CallerCustomization(val contactId: Long? = null) : Screen
     data object Blocked : Screen
     data object Recordings : Screen
     data object Merge : Screen
