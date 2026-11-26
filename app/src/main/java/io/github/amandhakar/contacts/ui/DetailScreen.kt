@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -120,6 +121,15 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                 ActionButton(Icons.AutoMirrored.Filled.Message, "Message", enabled = first != null) { first?.let { sms(it.number) } }
                 ActionButton(if (d.starred) Icons.Filled.Star else Icons.Filled.StarBorder, if (d.starred) "Favorite" else "Favorite") { vm.setStarred(d.id, !d.starred) }
                 ActionButton(Icons.Filled.Edit, "Edit") { vm.push(Screen.Edit(d.id)) }
+            }
+
+            GroupCard(Modifier.padding(top = 18.dp)) {
+                InfoRow(
+                    androidx.compose.material.icons.Icons.Filled.Tune,
+                    "Caller screen customization",
+                    "Customize the background and default caller image",
+                    onClick = { vm.push(Screen.CallerCustomization) },
+                )
             }
 
             if (d.phones.isNotEmpty()) {

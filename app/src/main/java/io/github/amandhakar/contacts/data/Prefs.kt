@@ -33,6 +33,31 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("swipe_action_threshold_percent", 60).coerceIn(30, 90)
         set(v) = sp.edit().putInt("swipe_action_threshold_percent", v.coerceIn(30, 90)).apply()
 
+    /** Optional caller-screen wallpaper and fallback avatar. Persisted document URIs are read-only. */
+    var callerBackgroundUri: String?
+        get() = sp.getString("caller_background_uri", null)
+        set(v) = sp.edit().putString("caller_background_uri", v).apply()
+
+    var callerFallbackPhotoUri: String?
+        get() = sp.getString("caller_fallback_photo_uri", null)
+        set(v) = sp.edit().putString("caller_fallback_photo_uri", v).apply()
+
+    var callerShowCallLabel: Boolean
+        get() = sp.getBoolean("caller_show_call_label", true)
+        set(v) = sp.edit().putBoolean("caller_show_call_label", v).apply()
+
+    var callerNameSizeSp: Int
+        get() = sp.getInt("caller_name_size_sp", 30).coerceIn(24, 36)
+        set(v) = sp.edit().putInt("caller_name_size_sp", v.coerceIn(24, 36)).apply()
+
+    var callerAccentColor: String
+        get() = sp.getString("caller_accent_color", "#7DFFA0") ?: "#7DFFA0"
+        set(v) = sp.edit().putString("caller_accent_color", v).apply()
+
+    var callerButtonStyle: String
+        get() = sp.getString("caller_button_style", "circle") ?: "circle"
+        set(v) = sp.edit().putString("caller_button_style", if (v == "rounded") "rounded" else "circle").apply()
+
     var autoRecord: Boolean
         get() = sp.getBoolean("auto_record", false)
         set(v) = sp.edit().putBoolean("auto_record", v).apply()

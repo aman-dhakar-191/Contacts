@@ -57,6 +57,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
         is Screen.Detail -> "contact"
         is Screen.Edit -> if (t.id == null) "contact_new" else "contact_edit"
         Screen.Settings -> "settings"
+        Screen.CallerCustomization -> "caller_customization"
         Screen.Blocked -> "blocked"
         Screen.Recordings -> "recordings"
         Screen.Merge -> "merge"
@@ -90,6 +91,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
                     is Screen.Detail -> DetailScreen(vm, top.id)
                     is Screen.Edit -> EditScreen(vm, top.id, top.number)
                     Screen.Settings -> SettingsScreen(vm, requestPermissions, requestDefaultDialer)
+                    Screen.CallerCustomization -> CallerScreenCustomizationScreen(vm)
                     Screen.Blocked -> BlockedScreen(vm)
                     Screen.Recordings -> RecordingsScreen(vm)
                     Screen.Merge -> MergeScreen(vm)
