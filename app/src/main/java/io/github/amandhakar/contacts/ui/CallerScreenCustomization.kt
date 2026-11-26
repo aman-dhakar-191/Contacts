@@ -19,6 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +46,11 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
     var backgroundUri by remember { mutableStateOf(vm.prefs.callerBackgroundUri) }
     var fallbackPhotoUri by remember { mutableStateOf(vm.prefs.callerFallbackPhotoUri) }
     var showCallLabel by remember { mutableStateOf(vm.prefs.callerShowCallLabel) }
+    var nameSize by remember { mutableStateOf(vm.prefs.callerNameSizeSp.toFloat()) }
+    var accentColor by remember { mutableStateOf(vm.prefs.callerAccentColor) }
+    var buttonStyle by remember { mutableStateOf(vm.prefs.callerButtonStyle) }
+    var accentMenu by remember { mutableStateOf(false) }
+    var buttonMenu by remember { mutableStateOf(false) }
 
     fun keepUri(uri: Uri): String {
         try {
@@ -97,6 +106,52 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                         vm.prefs.callerFallbackPhotoUri = null
                     })
                 }
+                SectionLabel("Name & number style")
+                GroupCard {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Text("Caller name size · ${nameSize.toInt()} sp", style = MaterialTheme.typography.titleSmall)
+                        Slider(
+                            value = nameSize, onValueChange = { nameSize = it },
+                            onValueChangeFinished = { vm.prefs.callerNameSizeSp = nameSize.toInt() },
+                            valueRange = 24f..36f,
+                        )
+                    }
+                    InfoRow(
+                        androidx.compose.material.icons.Icons.Filled.Palette, "Accent color",
+                        "Used for active call controls and highlights",
+                        trailing = {
+                            Box {
+                                OutlinedButton(onClick = { accentMenu = true }) { Text(accentLabel(accentColor)) }
+                                DropdownMenu(expanded = accentMenu, onDismissRequest = { accentMenu = false }) {
+                                    listOf("#7DFFA0" to "Mint", "#80B8FF" to "Blue", "#D7A0FF" to "Purple", "#FFB86B" to "Amber").forEach { (hex, label) ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                                            accentColor = hex
+                                            vm.prefs.callerAccentColor = hex
+                                            accentMenu = false
+                                        })
+                                    }
+                                }
+                            }
+                        },
+                    )
+                    InfoRow(
+                        androidx.compose.material.icons.Icons.Filled.Dashboard, "Button style",
+                        "Choose circular or rounded-square controls",
+                        trailing = {
+                            Box {
+                                OutlinedButton(onClick = { buttonMenu = true }) { Text(if (buttonStyle == "rounded") "Rounded" else "Circular") }
+                                DropdownMenu(expanded = buttonMenu, onDismissRequest = { buttonMenu = false }) {
+                                    DropdownMenuItem(text = { Text("Circular") }, onClick = {
+                                        buttonStyle = "circle"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false
+                                    })
+                                    DropdownMenuItem(text = { Text("Rounded") }, onClick = {
+                                        buttonStyle = "rounded"; vm.prefs.callerButtonStyle = buttonStyle; buttonMenu = false
+                                    })
+                                }
+                            }
+                        },
+                    )
+                }
                 SectionLabel("Call information")
                 GroupCard {
                     InfoRow(
@@ -124,7 +179,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                     ) {
                         Avatar("Aman Dhaker", fallbackPhotoUri, 88.dp)
                         Spacer(Modifier.height(14.dp))
-                        Text("Aman Dhaker", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                        Text("Aman Dhaker", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontSize = nameSize.sp)
                         Text("9660617067", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFD0D8D3))
                         if (showCallLabel) {
                             androidx.compose.material3.Surface(
@@ -141,9 +196,15 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                         backgroundUri = null
                         fallbackPhotoUri = null
                         showCallLabel = true
+                        nameSize = 30f
+                        accentColor = "#7DFFA0"
+                        buttonStyle = "circle"
                         vm.prefs.callerBackgroundUri = null
                         vm.prefs.callerFallbackPhotoUri = null
                         vm.prefs.callerShowCallLabel = true
+                        vm.prefs.callerNameSizeSp = 30
+                        vm.prefs.callerAccentColor = "#7DFFA0"
+                        vm.prefs.callerButtonStyle = "circle"
                     },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 ) { Text("Reset all customizations") }
@@ -168,4 +229,11 @@ fun CallerScreenBackdrop(uri: String?) {
         Image(image.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(Modifier.fillMaxSize().background(Color(0x9908100D)))
     }
+}
+
+private fun accentLabel(hex: String): String = when (hex) {
+    "#80B8FF" -> "Blue"
+    "#D7A0FF" -> "Purple"
+    "#FFB86B" -> "Amber"
+    else -> "Mint"
 }
