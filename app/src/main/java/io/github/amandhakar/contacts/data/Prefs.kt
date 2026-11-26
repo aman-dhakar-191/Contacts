@@ -46,6 +46,18 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("caller_show_call_label", true)
         set(v) = sp.edit().putBoolean("caller_show_call_label", v).apply()
 
+    var callerNameSizeSp: Int
+        get() = sp.getInt("caller_name_size_sp", 30).coerceIn(24, 36)
+        set(v) = sp.edit().putInt("caller_name_size_sp", v.coerceIn(24, 36)).apply()
+
+    var callerAccentColor: String
+        get() = sp.getString("caller_accent_color", "#7DFFA0") ?: "#7DFFA0"
+        set(v) = sp.edit().putString("caller_accent_color", v).apply()
+
+    var callerButtonStyle: String
+        get() = sp.getString("caller_button_style", "circle") ?: "circle"
+        set(v) = sp.edit().putString("caller_button_style", if (v == "rounded") "rounded" else "circle").apply()
+
     var autoRecord: Boolean
         get() = sp.getBoolean("auto_record", false)
         set(v) = sp.edit().putBoolean("auto_record", v).apply()
