@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -115,7 +116,7 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel, contactId: Long? = null) {
             }
             item {
                 TabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    CustomizationTab.entries.forEach { item ->
+                    CustomizationTab.values().forEach { item ->
                         Tab(selected = tab == item, onClick = { tab = item }, text = { Text(item.name) })
                     }
                 }
@@ -232,9 +233,8 @@ private fun CustomizationRow(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    androidx.compose.foundation.clickable
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, Modifier.size(26.dp), tint = MaterialTheme.colorScheme.primary)
@@ -242,8 +242,6 @@ private fun CustomizationRow(
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.0f))
-        OutlinedButton(onClick = onClick) { Text("Set") }
     }
 }
 
