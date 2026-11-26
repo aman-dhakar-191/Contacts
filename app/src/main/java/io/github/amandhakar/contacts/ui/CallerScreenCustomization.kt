@@ -10,6 +10,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -104,13 +112,28 @@ fun CallerScreenCustomizationScreen(vm: AppViewModel) {
                     )
                 }
                 SectionLabel("Preview")
-                GroupCard {
-                    Box(Modifier.fillMaxSize().padding(16.dp)) {
-                        Text(
-                            "Aman Dhaker\n9660617067\nCalling…",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                Box(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(300.dp)
+                        .clip(RoundedCornerShape(28.dp)).background(Color(0xFF14231D)),
+                ) {
+                    CallerScreenBackdrop(backgroundUri)
+                    Column(
+                        Modifier.fillMaxSize().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    ) {
+                        Avatar("Aman Dhaker", fallbackPhotoUri, 88.dp)
+                        Spacer(Modifier.height(14.dp))
+                        Text("Aman Dhaker", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                        Text("9660617067", style = MaterialTheme.typography.bodyLarge, color = Color(0xFFD0D8D3))
+                        if (showCallLabel) {
+                            androidx.compose.material3.Surface(
+                                color = Color(0xFF2E8B45), shape = RoundedCornerShape(24.dp),
+                                modifier = Modifier.padding(top = 10.dp),
+                            ) { Text("Personal", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Color.White) }
+                        }
+                        Text("Calling…", Modifier.padding(top = 14.dp), color = Color.White)
+                        Text("●     ⠿     ◖", Modifier.padding(top = 28.dp), color = Color.White)
                     }
                 }
                 androidx.compose.material3.TextButton(
