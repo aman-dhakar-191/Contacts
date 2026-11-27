@@ -128,7 +128,7 @@ fun ContactsTab(vm: AppViewModel) {
                         }
                         fun perform(action: SwipeAction) {
                             when (action) {
-                                SwipeAction.CALL -> if (!number.isNullOrBlank()) Dialer.call(context, number)
+                                SwipeAction.CALL -> if (!number.isNullOrBlank()) vm.callFromSwipe(context, number, c.name)
                                 SwipeAction.MESSAGE -> if (!number.isNullOrBlank()) {
                                     try { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number"))) } catch (_: Exception) {}
                                 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -52,6 +53,8 @@ import io.github.amandhakar.contacts.Screen
 @Composable
 fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDialer: () -> Unit) {
     BackHandler(enabled = vm.stack.isNotEmpty()) { vm.pop() }
+    // Declared after, so it wins: back (or the back gesture) first cancels a swipe call that is about to dial.
+    BackHandler(enabled = vm.pendingCall != null) { vm.cancelPendingCall() }
     val screenName = when (val t = vm.stack.lastOrNull()) {
         null -> listOf("favorites", "recents", "contacts", "keypad")[vm.tab]
         is Screen.Detail -> "contact"
@@ -69,6 +72,7 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
         is Screen.IdentifierRule -> "identifier_rule"
         Screen.IdentifierLog -> "identifier_log"
         Screen.IdentifierCorrections -> "identifier_corrections"
+        is Screen.CallDetails -> "call_details"
     }
     androidx.compose.runtime.LaunchedEffect(screenName) { io.github.amandhakar.contacts.util.Telemetry.screen(screenName) }
     val calls by io.github.amandhakar.contacts.call.CallHub.calls.collectAsState()
@@ -103,6 +107,14 @@ fun AppRoot(vm: AppViewModel, requestPermissions: () -> Unit, requestDefaultDial
                     is Screen.IdentifierRule -> RuleEditScreen(vm, top.id)
                     Screen.IdentifierLog -> IdentifierLogScreen(vm)
                     Screen.IdentifierCorrections -> CorrectionsScreen(vm)
+                    is Screen.CallDetails -> CallDetailsScreen(vm, top.number)
+                }
+                vm.pendingCall?.let { pending ->
+                    PendingCallBar(
+                        vm, pending,
+                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                            .padding(start = 12.dp, end = 12.dp, bottom = if (vm.stack.isEmpty()) 88.dp else 12.dp),
+                    )
                 }
             }
         }
