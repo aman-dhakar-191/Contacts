@@ -253,6 +253,13 @@ fun SettingsScreen(vm: AppViewModel, requestPermissions: () -> Unit, requestDefa
                         }
                     },
                 )
+                InfoRow(
+                    null, "Undo before a swipe call",
+                    if (vm.swipeCallUndo) "A Cancel bar shows for ${io.github.amandhakar.contacts.util.SwipeGestures.CALL_UNDO_MS / 1000} seconds before a swipe places a call"
+                    else "Off · a swipe calls straight away",
+                    onClick = { vm.updateSwipeCallUndo(!vm.swipeCallUndo) },
+                    trailing = { Switch(vm.swipeCallUndo, { vm.updateSwipeCallUndo(it) }) },
+                )
             }
 
             SectionLabel("Identifier")

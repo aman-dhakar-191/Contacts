@@ -33,6 +33,11 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("swipe_action_threshold_percent", 60).coerceIn(30, 90)
         set(v) = sp.edit().putInt("swipe_action_threshold_percent", v.coerceIn(30, 90)).apply()
 
+    /** A call started by a swipe waits a few seconds with a Cancel bar, so an accidental swipe doesn't dial. */
+    var swipeCallUndo: Boolean
+        get() = sp.getBoolean("swipe_call_undo", true)
+        set(v) = sp.edit().putBoolean("swipe_call_undo", v).apply()
+
     /** Optional caller-screen wallpaper and fallback avatar. Persisted document URIs are read-only. */
     var callerBackgroundUri: String?
         get() = sp.getString("caller_background_uri", null)

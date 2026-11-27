@@ -5,7 +5,28 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import io.github.amandhakar.contacts.util.SwipeGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -23,8 +44,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -143,8 +162,13 @@ fun Avatar(name: String, photoUri: String?, size: Dp = 48.dp) {
 
 
 /**
- * A row with configurable global swipe actions. Action panes stay behind the
- * row and an intentional swipe past the threshold executes the action directly.
+ * A row with the swipe actions chosen in Settings.
+ *
+ * Swiping slides the row and shows the action behind it. Past the threshold the action fills with
+ * its colour and the phone ticks; letting go there runs it, letting go earlier springs the row back.
+ * To keep gesture navigation from running actions by accident, a swipe never starts in the system's
+ * own gesture areas (back from either screen edge, home along the bottom), it has to be clearly
+ * sideways, and nothing runs when the system takes the touch over.
  */
 @Composable
 fun SwipeActionRow(
@@ -154,129 +178,199 @@ fun SwipeActionRow(
     onSwipeRight: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    // A deliberate, longer swipe avoids accidental actions during edge-navigation gestures.
-    val revealWidth = 144.dp
-    val edgeGuard = 32.dp
-    val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
     val context = LocalContext.current
-    val thresholdPercent = remember(context) { Prefs(context).swipeActionThresholdPercent }
-    var rowWidthPx by remember { mutableFloatStateOf(0f) }
-    var gestureDistance by remember { mutableFloatStateOf(0f) }
-    val commitThresholdPx = rowWidthPx * (thresholdPercent / 100f)
-    val edgeGuardPx = with(LocalDensity.current) { edgeGuard.toPx() }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    var dragging by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var returnJob by remember { mutableStateOf<Job?>(null) }
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val view = LocalView.current
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val thresholdPercent = remember(context) { Prefs(context).swipeActionThresholdPercent }
+
+    // The system's gesture areas, in window pixels. Read here so they follow rotation and nav-mode changes.
+    val gestureInsets = WindowInsets.systemGestures
+    val guard by rememberUpdatedState(
+        EdgeGuard(
+            left = gestureInsets.getLeft(density, layoutDirection).toFloat(),
+            right = gestureInsets.getRight(density, layoutDirection).toFloat(),
+            bottom = gestureInsets.getBottom(density).toFloat(),
+            minEdge = with(density) { 24.dp.toPx() },
+            margin = with(density) { 16.dp.toPx() },
+        ),
+    )
     val latestOnSwipeLeft by rememberUpdatedState(onSwipeLeft)
     val latestOnSwipeRight by rememberUpdatedState(onSwipeRight)
-    val minOffset = if (swipeLeft != SwipeAction.NONE) -revealPx else 0f
-    val maxOffset = if (swipeRight != SwipeAction.NONE) revealPx else 0f
-    val threshold = commitThresholdPx
-    // Past the threshold, letting go runs the action: say so with colour and a short tick.
-    val rightArmed by remember(threshold) { derivedStateOf { gestureDistance >= threshold } }
-    val leftArmed by remember(threshold) { derivedStateOf { gestureDistance <= -threshold } }
-    LaunchedEffect(rightArmed, leftArmed) {
-        if (rightArmed || leftArmed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+
+    var rowWidth by remember { mutableFloatStateOf(0f) }
+    val rowOrigin = remember { floatArrayOf(0f, 0f) }
+    var distance by remember { mutableFloatStateOf(0f) } // finger travel
+    var offset by remember { mutableFloatStateOf(0f) }   // where the row is drawn
+    var dragging by remember { mutableStateOf(false) }
+    var committed by remember { mutableStateOf(SwipeAction.NONE) }
+    val settleJob = remember { arrayOfNulls<Job>(1) }
+    val threshold = SwipeGestures.threshold(rowWidth, thresholdPercent)
+
+    val armed by remember(threshold, swipeLeft, swipeRight) {
+        derivedStateOf { SwipeGestures.armed(distance, threshold, swipeLeft, swipeRight) }
+    }
+    // A firm tick when letting go would run the action, a light one when the swipe backs off again.
+    var wasArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        val now = armed != SwipeAction.NONE
+        if (now && dragging) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        else if (!now && wasArmed && dragging) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        wasArmed = now
     }
 
-    Box(Modifier.fillMaxWidth().onSizeChanged { rowWidthPx = it.width.toFloat() }) {
-        Row(Modifier.matchParentSize(), verticalAlignment = Alignment.CenterVertically) {
-            if (swipeRight != SwipeAction.NONE) {
-                SwipeActionSlot(swipeRight, rightArmed, Modifier.width(revealWidth))
+    Box(
+        Modifier.fillMaxWidth()
+            .clipToBounds()
+            .onSizeChanged { rowWidth = it.width.toFloat() }
+            .onGloballyPositioned { val p = it.positionInWindow(); rowOrigin[0] = p.x; rowOrigin[1] = p.y }
+            .semantics {
+                // Swipes are invisible to TalkBack, so offer the same actions in its actions menu.
+                customActions = listOfNotNull(
+                    swipeRight.takeIf { it != SwipeAction.NONE }?.let { a -> CustomAccessibilityAction(a.label) { latestOnSwipeRight(); true } },
+                    swipeLeft.takeIf { it != SwipeAction.NONE && it != swipeRight }?.let { a -> CustomAccessibilityAction(a.label) { latestOnSwipeLeft(); true } },
+                )
             }
-            Spacer(Modifier.weight(1f))
-            if (swipeLeft != SwipeAction.NONE) {
-                SwipeActionSlot(swipeLeft, leftArmed, Modifier.width(revealWidth))
-            }
+            .pointerInput(swipeLeft, swipeRight, threshold) {
+                if (swipeLeft == SwipeAction.NONE && swipeRight == SwipeAction.NONE) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val g = guard
+                    val root = view.rootView
+                    val startsAtEdge = SwipeGestures.startsInSystemGesture(
+                        rowOrigin[0] + down.position.x, rowOrigin[1] + down.position.y,
+                        root.width.toFloat(), root.height.toFloat(),
+                        g.left, g.right, g.bottom, g.minEdge, g.margin,
+                    )
+                    // Leave touches in the system's gesture areas alone: that is where back and home start.
+                    if (startsAtEdge) return@awaitEachGesture
+
+                    var overSlop = 0f
+                    val drag = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                        val moved = change.position - down.position
+                        // Only a clearly sideways move in a direction that has an action becomes a swipe;
+                        // anything else is left to the list, so it can scroll.
+                        if (SwipeGestures.isHorizontal(moved.x, moved.y) && SwipeGestures.allowed(moved.x, swipeLeft, swipeRight)) {
+                            change.consume()
+                            overSlop = over.x
+                        }
+                    } ?: return@awaitEachGesture
+
+                    settleJob[0]?.cancel()
+                    committed = SwipeAction.NONE
+                    dragging = true
+                    val width = size.width.toFloat()
+                    distance = SwipeGestures.clampDistance(offset + overSlop, width, swipeLeft, swipeRight)
+                    offset = SwipeGestures.visualOffset(distance, threshold)
+                    // false when the system or the list took the touch over (a back gesture, a scroll).
+                    val endedNormally = horizontalDrag(drag.id) { change ->
+                        distance = SwipeGestures.clampDistance(distance + change.positionChange().x, width, swipeLeft, swipeRight)
+                        offset = SwipeGestures.visualOffset(distance, threshold)
+                        change.consume()
+                    }
+                    val action = SwipeGestures.onRelease(distance, threshold, endedNormally, swipeLeft, swipeRight)
+                    val fromRight = distance > 0f
+                    dragging = false
+                    distance = 0f
+                    committed = action
+                    val from = offset
+                    settleJob[0] = scope.launch {
+                        animate(
+                            from, 0f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                        ) { v, _ -> offset = v }
+                        committed = SwipeAction.NONE
+                    }
+                    if (action != SwipeAction.NONE) {
+                        if (fromRight) latestOnSwipeRight() else latestOnSwipeLeft()
+                    }
+                }
+            },
+    ) {
+        val shown = when {
+            offset > 0.5f -> swipeRight
+            offset < -0.5f -> swipeLeft
+            else -> SwipeAction.NONE
+        }
+        if (shown != SwipeAction.NONE) {
+            SwipeBackground(
+                action = shown,
+                fromLeft = offset > 0f,
+                progress = SwipeGestures.progress(offset, threshold),
+                armed = committed != SwipeAction.NONE || armed != SwipeAction.NONE,
+                modifier = Modifier.matchParentSize(),
+            )
         }
         Box(
             Modifier.fillMaxWidth()
                 // offset BEFORE background: the opaque background must slide with the row,
-                // otherwise it stays in place and hides the action panes behind it.
-                .offset { IntOffset(dragOffset.roundToInt(), 0) }
-                .background(MaterialTheme.colorScheme.surface)
-                .pointerInput(swipeLeft, swipeRight, revealPx, commitThresholdPx, edgeGuardPx) {
-                    var gestureEligible = false
-                    detectHorizontalDragGestures(
-                        onDragStart = { start ->
-                            // Do not interpret Android's left/right system-edge gestures as row actions.
-                            gestureEligible = start.x > edgeGuardPx && start.x < size.width - edgeGuardPx
-                            if (gestureEligible) {
-                                returnJob?.cancel()
-                                dragging = true
-                                gestureDistance = 0f
-                            }
-                        },
-                        onHorizontalDrag = { change, amount ->
-                            if (gestureEligible) {
-                                change.consume()
-                                gestureDistance = (gestureDistance + amount).coerceIn(-size.width.toFloat(), size.width.toFloat())
-                                dragOffset = (dragOffset + amount).coerceIn(minOffset, maxOffset)
-                            }
-                        },
-                        onDragEnd = {
-                            if (gestureEligible) {
-                                val completedOffset = dragOffset
-                                val completedDistance = gestureDistance
-                                gestureDistance = 0f
-                                dragging = false
-                                returnJob = scope.launch { animate(completedOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
-                                if (completedDistance >= threshold && swipeRight != SwipeAction.NONE) {
-                                    latestOnSwipeRight()
-                                } else if (completedDistance <= -threshold && swipeLeft != SwipeAction.NONE) {
-                                    latestOnSwipeLeft()
-                                }
-                            }
-                            gestureEligible = false
-                        },
-                        onDragCancel = {
-                            if (gestureEligible) {
-                                dragging = false
-                                gestureDistance = 0f
-                                returnJob = scope.launch { animate(dragOffset, 0f, animationSpec = tween(180)) { v, _ -> dragOffset = v } }
-                            }
-                            gestureEligible = false
-                        },
-                    )
-                },
+                // otherwise it stays in place and hides the action behind it.
+                .offset { IntOffset(offset.roundToInt(), 0) }
+                .background(MaterialTheme.colorScheme.surface),
         ) {
             content()
         }
     }
 }
 
+private data class EdgeGuard(val left: Float, val right: Float, val bottom: Float, val minEdge: Float, val margin: Float)
+
+/** The coloured area behind a row while it is swiped: muted until the threshold, the action's colour past it. */
 @Composable
-private fun SwipeActionSlot(action: SwipeAction, armed: Boolean, modifier: Modifier = Modifier) {
-    val icon = when (action) {
-        SwipeAction.CALL -> Icons.Filled.Call
-        SwipeAction.MESSAGE -> Icons.Filled.Message
-        SwipeAction.VIEW_CONTACT -> Icons.Filled.Person
-        SwipeAction.FAVORITE -> Icons.Filled.Star
-        SwipeAction.WHATSAPP -> Icons.Filled.Chat
-        SwipeAction.NONE -> return
-    }
-    Column(
-        modifier.fillMaxHeight()
-            .background(if (armed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+private fun SwipeBackground(action: SwipeAction, fromLeft: Boolean, progress: Float, armed: Boolean, modifier: Modifier = Modifier) {
+    val icon = swipeIcon(action) ?: return
+    val (actionColor, onActionColor) = swipeColors(action)
+    val bg by animateColorAsState(if (armed) actionColor else MaterialTheme.colorScheme.surfaceContainerHighest, tween(150), label = "swipeBg")
+    val fg by animateColorAsState(if (armed) onActionColor else MaterialTheme.colorScheme.onSurfaceVariant, tween(150), label = "swipeFg")
+    val scale by animateFloatAsState(
+        if (armed) 1.2f else 0.8f + 0.2f * progress,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "swipeScale",
+    )
+    val fade = 0.35f + 0.65f * progress
+    Row(
+        modifier.background(bg).padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (fromLeft) Arrangement.Absolute.Left else Arrangement.Absolute.Right,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = action.label,
-            modifier = Modifier.size(if (armed) 28.dp else 24.dp),
-            tint = if (armed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        Text(
-            action.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (armed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
+        val iconView: @Composable () -> Unit = {
+            Icon(
+                icon, null,
+                Modifier.size(24.dp).graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade },
+                tint = fg,
+            )
+        }
+        val labelView: @Composable () -> Unit = {
+            Text(
+                action.label, Modifier.graphicsLayer { alpha = fade },
+                style = MaterialTheme.typography.labelLarge, color = fg, maxLines = 1,
+            )
+        }
+        if (fromLeft) { iconView(); Spacer(Modifier.width(12.dp)); labelView() }
+        else { labelView(); Spacer(Modifier.width(12.dp)); iconView() }
     }
+}
+
+private fun swipeIcon(action: SwipeAction): ImageVector? = when (action) {
+    SwipeAction.CALL -> Icons.Filled.Call
+    SwipeAction.MESSAGE -> Icons.AutoMirrored.Filled.Message
+    SwipeAction.VIEW_CONTACT -> Icons.Filled.Person
+    SwipeAction.FAVORITE -> Icons.Filled.Star
+    SwipeAction.WHATSAPP -> Icons.AutoMirrored.Filled.Chat
+    SwipeAction.NONE -> null
+}
+
+/** Each action keeps its own colour in light and dark, so the colour alone says what will happen. */
+@Composable
+private fun swipeColors(action: SwipeAction): Pair<Color, Color> = when (action) {
+    SwipeAction.CALL -> Color(0xFF1E8E3E) to Color.White
+    SwipeAction.MESSAGE -> Color(0xFF1A73E8) to Color.White
+    SwipeAction.WHATSAPP -> Color(0xFF128C7E) to Color.White
+    SwipeAction.FAVORITE -> Color(0xFFF9AB00) to Color(0xFF202124)
+    SwipeAction.VIEW_CONTACT -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
+    SwipeAction.NONE -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /** Small all-caps-free section label used above groups of rows. */

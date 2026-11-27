@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.app.role.RoleManager
 import android.content.pm.PackageManager
+import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +29,11 @@ import io.github.amandhakar.contacts.data.PhoneEntry
 import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.data.SwipeAction
 import io.github.amandhakar.contacts.data.RecordingsRepo
+import io.github.amandhakar.contacts.call.Dialer
 import io.github.amandhakar.contacts.util.PhoneUtil
+import io.github.amandhakar.contacts.util.SwipeGestures
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +56,8 @@ sealed interface Screen {
     data class IdentifierRule(val id: Long) : Screen
     data object IdentifierLog : Screen
     data object IdentifierCorrections : Screen
+    /** Calls with one number that is not a saved contact, opened by tapping it in Recents. */
+    data class CallDetails(val number: String) : Screen
 }
 
 val REQUIRED_PERMISSIONS = arrayOf(
@@ -134,6 +141,46 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun updateSwipeRightAction(action: SwipeAction) {
         prefs.swipeRightAction = action
         swipeRightAction = action
+    }
+
+    /** A call started by a swipe, waiting out its undo window. */
+    data class PendingCall(val number: String, val name: String, val startedAt: Long)
+
+    var pendingCall by mutableStateOf<PendingCall?>(null)
+        private set
+    private var pendingCallJob: Job? = null
+
+    var swipeCallUndo by mutableStateOf(prefs.swipeCallUndo)
+        private set
+    fun updateSwipeCallUndo(on: Boolean) {
+        prefs.swipeCallUndo = on
+        swipeCallUndo = on
+        if (!on) cancelPendingCall()
+    }
+
+    /** The Call swipe action: dials after a short Cancel window, or straight away when that is turned off. */
+    fun callFromSwipe(ctx: Context, number: String, name: String) {
+        if (number.isBlank()) return
+        if (!swipeCallUndo) { Dialer.call(ctx, number); return }
+        pendingCallJob?.cancel()
+        pendingCall = PendingCall(number, name, System.currentTimeMillis())
+        pendingCallJob = viewModelScope.launch {
+            delay(SwipeGestures.CALL_UNDO_MS)
+            pendingCall = null
+            Dialer.call(app, number)
+        }
+    }
+
+    fun cancelPendingCall() {
+        pendingCallJob?.cancel()
+        pendingCallJob = null
+        pendingCall = null
+    }
+
+    fun callPendingNow(ctx: Context) {
+        val p = pendingCall ?: return
+        cancelPendingCall()
+        Dialer.call(ctx, p.number)
     }
 
     fun push(s: Screen) { stack += s }

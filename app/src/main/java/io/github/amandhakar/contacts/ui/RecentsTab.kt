@@ -52,7 +52,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.amandhakar.contacts.AppViewModel
 import io.github.amandhakar.contacts.Screen
-import io.github.amandhakar.contacts.call.Dialer
 import io.github.amandhakar.contacts.data.CallEntry
 import io.github.amandhakar.contacts.data.SwipeAction
 import io.github.amandhakar.contacts.util.PhoneUtil
@@ -158,7 +157,7 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
     }
     fun perform(action: SwipeAction) {
         when (action) {
-            SwipeAction.CALL -> if (e.number.isNotBlank()) Dialer.call(ctx, e.number)
+            SwipeAction.CALL -> vm.callFromSwipe(ctx, e.number, name)
             SwipeAction.MESSAGE -> if (e.number.isNotBlank()) {
                 try { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${e.number}"))) } catch (_: Exception) {}
             }
@@ -182,7 +181,13 @@ private fun CallRow(vm: AppViewModel, e: CallEntry, name: String, contactId: Lon
         Box(Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth().combinedClickable(
-                    onClick = {},   // a tap no longer places a call; use the swipe action or the long-press menu
+                    // A tap opens the person (saved contact) or this number's call details; it never dials.
+                    onClick = {
+                        when {
+                            contactId != null -> vm.push(Screen.Detail(contactId))
+                            e.number.isNotBlank() -> vm.push(Screen.CallDetails(e.number))
+                        }
+                    },
                     onLongClick = { menu = true },
                 ).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
