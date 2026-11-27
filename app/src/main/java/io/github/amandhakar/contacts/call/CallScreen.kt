@@ -89,7 +89,7 @@ fun CallScreen(onClose: () -> Unit) {
     val recLabel by RecorderState.sourceLabel.collectAsState()
     val recReason by RecorderState.reason.collectAsState()
     val callerPrefs = remember(ctx) { io.github.amandhakar.contacts.data.Prefs(ctx) }
-    val callerAccent = remember(callerPrefs.callerAccentColor) { runCatching { Color(android.graphics.Color.parseColor(callerPrefs.callerAccentColor)) }.getOrDefault(Color(0xFF7DFFA0)) }
+    val callerAccent = remember(callerPrefs) { io.github.amandhakar.contacts.ui.callerAccentColor(callerPrefs.callerAccentColor) }
     val roundedControls = callerPrefs.callerButtonStyle == "rounded"
     var showTest by remember { mutableStateOf(false) }
     var reportWrong by remember { mutableStateOf(false) }
@@ -119,9 +119,10 @@ fun CallScreen(onClose: () -> Unit) {
 
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg)) {
-        val contactBackground = shown?.contactId?.let { callerPrefs.contactCallerBackgroundUri(it) }
-        val contactPhoto = shown?.contactId?.let { callerPrefs.contactCallerPhotoUri(it) }
-        io.github.amandhakar.contacts.ui.CallerScreenBackdrop(contactBackground)
+        // The contact's own wallpaper and photo win; otherwise the ones set for everyone in Settings.
+        val callerBackground = shown?.let { io.github.amandhakar.contacts.util.CallerImages.backgroundFor(callerPrefs, it.contactId) }
+        val callerPhoto = shown?.let { io.github.amandhakar.contacts.util.CallerImages.photoFor(callerPrefs, it.contactId, it.photoUri) }
+        io.github.amandhakar.contacts.ui.CallerScreenBackdrop(callerBackground)
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         if (shown == null) return@Box
         androidx.compose.material3.TextButton(onClick = { showTest = true }, modifier = Modifier.align(Alignment.TopEnd)) {
@@ -129,7 +130,7 @@ fun CallScreen(onClose: () -> Unit) {
         }
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(40.dp))
-            Avatar(shown.name ?: shown.number, contactPhoto ?: shown.photoUri, 112.dp)
+            Avatar(shown.name ?: shown.number, callerPhoto, 112.dp)
             Spacer(Modifier.height(20.dp))
             shown.callerAlert?.alert?.let { CallerAlertChip(it); Spacer(Modifier.height(12.dp)) }
             // Explicit lineHeight: without it a long name that wraps inherits a smaller line height from the theme and the lines overlap.
