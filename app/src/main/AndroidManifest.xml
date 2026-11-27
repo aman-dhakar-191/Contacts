@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Ear detection: turns the screen off while the phone is held to the ear during a call. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <queries>
         <intent><action android:name="android.intent.action.SENDTO" /><data android:scheme="smsto" /></intent>

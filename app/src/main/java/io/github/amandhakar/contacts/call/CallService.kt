@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /** Android binds this while the app is the default phone app and a call exists. */
@@ -20,6 +21,7 @@ class CallService : InCallService() {
     private val callbacks = HashMap<Call, Call.Callback>()
     private val answered = HashSet<Call>()
     private val autoDecided = HashSet<Call>()
+    private var proximity: ProximityScreen? = null
 
     private val ui = android.os.Handler(android.os.Looper.getMainLooper())
     // Re-posts the live call notification each second so the timer in the island / pill keeps counting.
@@ -38,10 +40,18 @@ class CallService : InCallService() {
         val prefs = io.github.amandhakar.contacts.data.Prefs(applicationContext)
         CallHub.rememberedName = { n -> if (prefs.rememberCallerNames) names.get(n) else null }
         ui.postDelayed(clock, 1000)
+        // Ear detection: screen off while the phone is at the ear during a call, back on when it is lowered.
+        val ear = ProximityScreen(applicationContext)
+        proximity = ear
+        if (ear.supported) {
+            scope.launch { combine(CallHub.calls, CallHub.audio) { c, a -> c to a }.collect { (c, a) -> ear.update(c, a) } }
+        }
     }
 
     override fun onDestroy() {
         ui.removeCallbacks(clock)
+        proximity?.release()
+        proximity = null
         CallHub.service = null
         CallHub.rememberedName = null
         scope.cancel()
