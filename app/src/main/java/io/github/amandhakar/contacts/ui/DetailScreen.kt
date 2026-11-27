@@ -127,7 +127,7 @@ fun DetailScreen(vm: AppViewModel, id: Long) {
                 InfoRow(
                     androidx.compose.material.icons.Icons.Filled.Tune,
                     "Caller screen customization",
-                    "Customize the background and default caller image",
+                    "A wallpaper and photo just for calls with this contact",
                     onClick = { vm.push(Screen.CallerCustomization(d.id)) },
                 )
             }

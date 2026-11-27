@@ -1,7 +1,6 @@
 package io.github.amandhakar.contacts.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -123,7 +122,8 @@ fun Avatar(name: String, photoUri: String?, size: Dp = 48.dp) {
         photoCache.get(photoUri)?.let { value = it; return@produceState }
         value = withContext(Dispatchers.IO) {
             try {
-                ctx.contentResolver.openInputStream(Uri.parse(photoUri))?.use { BitmapFactory.decodeStream(it) }
+                // Scaled while decoding, so a large custom caller photo cannot fill memory (Contacts thumbnails are already small).
+                io.github.amandhakar.contacts.util.CallerImages.decode(ctx, Uri.parse(photoUri), 512)
                     ?.also { photoCache.put(photoUri, it) }
             } catch (_: Exception) {
                 null

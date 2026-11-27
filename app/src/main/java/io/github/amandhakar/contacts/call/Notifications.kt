@@ -69,7 +69,7 @@ object Notifications {
             ctx, 12, Intent(ctx, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_DECLINE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val photo = contactPhoto(ctx, info.photoUri)
+        val photo = contactPhoto(ctx, io.github.amandhakar.contacts.util.CallerImages.photoFor(io.github.amandhakar.contacts.data.Prefs(ctx), info.contactId, info.photoUri))
         val person = Person.Builder().setName(label).setImportant(true)
             .also { if (photo != null) it.setIcon(IconCompat.createWithBitmap(photo)) }.build()
         val n = NotificationCompat.Builder(ctx, CH_INCOMING)
@@ -107,7 +107,7 @@ object Notifications {
             else -> "Calling…"
         }
         val who = (info.tag?.let { "${it.name} · $label" } ?: label) + (route?.let { " · $it" } ?: "") + if (otherCalls > 0) " · +$otherCalls more" else ""
-        val photo = contactPhoto(ctx, info.photoUri)
+        val photo = contactPhoto(ctx, io.github.amandhakar.contacts.util.CallerImages.photoFor(io.github.amandhakar.contacts.data.Prefs(ctx), info.contactId, info.photoUri))
         val b = NotificationCompat.Builder(ctx, CH_ONGOING)
             .also { smallIcon(it, photo) }
             .setContentTitle(title)
@@ -155,7 +155,8 @@ object Notifications {
 
     private fun loadPhoto(ctx: Context, uri: String): android.graphics.Bitmap? {
         return try {
-            val src = ctx.contentResolver.openInputStream(Uri.parse(uri))?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
+            // Scaled down while decoding: a custom caller photo can be a full-size camera picture.
+            val src = io.github.amandhakar.contacts.util.CallerImages.decode(ctx, Uri.parse(uri), 256) ?: return null
             val d = 128
             val side = minOf(src.width, src.height)
             val square = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
