@@ -70,13 +70,13 @@ object CallerImages {
     fun decode(ctx: Context, uri: Uri, maxSide: Int): Bitmap? {
         return try {
             val cr = ctx.contentResolver
+            // A bounds-only decode always returns null and only fills in the size, so check the stream, not the result.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            cr.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+            val stream = cr.openInputStream(uri) ?: return null
+            stream.use { BitmapFactory.decodeStream(it, null, bounds) }
             val w = bounds.outWidth
             val h = bounds.outHeight
-            if (w <= 0 || h <= 0) return null
-            var sample = 1
-            while (maxOf(w, h) / (sample * 2) >= maxSide) sample *= 2
+            val sample = if (w > 0 && h > 0) sampleSize(w, h, maxSide) else 1
             val decoded = cr.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
             } ?: return null
@@ -101,6 +101,13 @@ object CallerImages {
         } catch (_: OutOfMemoryError) {
             null
         }
+    }
+
+    /** The largest power-of-two step that still leaves the long side at least [maxSide] px. */
+    fun sampleSize(width: Int, height: Int, maxSide: Int): Int {
+        var sample = 1
+        while (maxOf(width, height) / (sample * 2) >= maxSide) sample *= 2
+        return sample
     }
 
     fun decode(ctx: Context, uri: String?, maxSide: Int): Bitmap? =
