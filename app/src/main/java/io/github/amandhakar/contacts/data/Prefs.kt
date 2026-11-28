@@ -144,6 +144,11 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putString("preferred_source", v).apply()
 
     /** JSON of the last recording test, see RecordingProbe. */
+    /** The input (enum name) that last made a call recording with sound on this phone; tried early next time. */
+    var lastWorkingSource: String?
+        get() = sp.getString("last_working_source", null)
+        set(v) = sp.edit().putString("last_working_source", v).apply()
+
     var lastProbe: String?
         get() = sp.getString("last_probe", null)
         set(v) = sp.edit().putString("last_probe", v).apply()

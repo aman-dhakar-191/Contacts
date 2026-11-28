@@ -57,6 +57,9 @@ class RecorderService : Service() {
     private var peak = 0
     private var elapsedMs = 0
     private var currentRate = 0
+    private var silencedChecks = 0
+    private var lastRoute: RecordingDiagnostics.Route? = null
+    private val routeMs = HashMap<RecordingDiagnostics.Route, Int>()
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -64,9 +67,18 @@ class RecorderService : Service() {
             val r = recorder ?: return
             try { peak = maxOf(peak, r.maxAmplitude) } catch (_: Exception) {}
             elapsedMs += TICK_MS
-            if (elapsedMs >= CHECK_AFTER_MS && AudioStats.isSilent(peak) && queue.isNotEmpty()) {
+            trackRoute()
+            val silenced = if (elapsedMs > SILENCED_WATCH_MS) null else try {
+                r.activeRecordingConfiguration?.isClientSilenced
+            } catch (_: Exception) { null }
+            silencedChecks = if (silenced == true) silencedChecks + 1 else 0
+            val silencedNow = RecordingDiagnostics.shouldSwitchSilenced(elapsedMs, silencedChecks, queue.isNotEmpty())
+            if (silencedNow || (elapsedMs >= CHECK_AFTER_MS && AudioStats.isSilent(peak) && queue.isNotEmpty())) {
                 val bad = current
-                log("${bad?.name} silent for ${elapsedMs / 1000} s (peak $peak), trying the next input")
+                log(
+                    if (silencedNow) "${bad?.name} silenced by Android after ${elapsedMs / 1000.0} s, trying the next input"
+                    else "${bad?.name} silent for ${elapsedMs / 1000} s (peak $peak), trying the next input",
+                )
                 discardCurrent()
                 val started = startNext()
                 Telemetry.event("recording_silent_switch", "from" to bad?.name, "to" to (if (started) current?.name else "none"))
@@ -114,8 +126,19 @@ class RecorderService : Service() {
             RecorderState.error.value = RecordingDiagnostics.userMessage(failure)
             stopSelf(); return
         }
-        queue.clear(); queue.addAll(RecSource.chain(Prefs(this).preferredSource))
-        log("inputs to try: ${queue.joinToString { it.name }}")
+        val prefs = Prefs(this)
+        val probe = RecordingProbe.parse(prefs.lastProbe)
+        val worked = probe.filter { it.status == ProbeStatus.SIGNAL }.map { it.source.name }.toSet()
+        val failedTest = probe.filter { it.status != ProbeStatus.SIGNAL }.map { it.source.name }.toSet()
+        val picked = prefs.preferredSource.takeIf { it != "auto" }
+        val order = RecordingDiagnostics.orderInputs(
+            RecSource.chain(prefs.preferredSource).map { it.name }, picked, prefs.lastWorkingSource, worked, failedTest,
+        )
+        queue.clear(); queue.addAll(order.mapNotNull { n -> RecSource.entries.firstOrNull { it.name == n } })
+        log(
+            "inputs to try: ${queue.joinToString { it.name }} (picked ${picked ?: "auto"}, last with sound " +
+                "${prefs.lastWorkingSource ?: "none"}, test heard ${worked.ifEmpty { setOf("none") }.joinToString("/")})",
+        )
         if (!startNext()) {
             Telemetry.event("recording_failed", "reason" to "no_input_opened")
             RecorderState.error.value = RecordingDiagnostics.userMessage(Failure.NO_INPUT)
@@ -165,7 +188,8 @@ class RecorderService : Service() {
                     "recording_started", "source" to src.name, "both_sides" to (src == RecSource.VOICE_CALL),
                     "auto_reason" to (RecorderState.reason.value ?: "manual"), "rate" to rate,
                 )
-                peak = 0; elapsedMs = 0
+                peak = 0; elapsedMs = 0; silencedChecks = 0; routeMs.clear(); lastRoute = null
+                trackRoute(0)
                 RecorderState.bothSides.value = src == RecSource.VOICE_CALL
                 RecorderState.sourceLabel.value = src.label
                 RecorderState.active.value = true
@@ -178,6 +202,16 @@ class RecorderService : Service() {
         }
         if (failed.isNotEmpty()) log("no input opened: ${RecordingDiagnostics.summary(failed)}")
         return false
+    }
+
+    /** Notes where the call sound goes (speaker, earpiece, Bluetooth) and logs each change, so a recording can say it. */
+    private fun trackRoute(ms: Int = TICK_MS) {
+        val route = AudioRoutes.recordingRoute(CallHub.audio.value)
+        routeMs[route] = (routeMs[route] ?: 0) + ms
+        if (route != lastRoute) {
+            log(if (lastRoute == null) "route at start: ${route.key}" else "route now ${route.key} (at ${elapsedMs / 1000} s)")
+            lastRoute = route
+        }
     }
 
     /** MediaRecorder reported an error while running (e.g. the audio server restarted). Keep what was recorded. */
@@ -207,7 +241,8 @@ class RecorderService : Service() {
     }
 
     private fun finishRecording() {
-        val f = file
+        var f = file
+        val src = current
         val wasRecording = recorder != null
         val wasSilent = wasRecording && AudioStats.isSilent(peak)
         val seconds = elapsedMs / 1000
@@ -219,7 +254,16 @@ class RecorderService : Service() {
         }
         if (wasRecording) {
             val kept = f != null && f.exists()
-            log("stopped ${current?.name} @ $currentRate Hz after $seconds s, peak $peak, ${if (kept) "saved ${f!!.length() / 1024} KB" else if (wasSilent) "discarded (silent)" else "discarded (empty)"}")
+            val route = RecordingDiagnostics.overallRoute(routeMs)
+            if (kept && src != null && src != RecSource.VOICE_CALL) {
+                f = RecordingsRepo(this).retag(f!!, RecordingDiagnostics.captureTag(false, src.name, route))
+            }
+            if (kept && src != null && !wasSilent && seconds >= 3) Prefs(this).lastWorkingSource = src.name
+            val routes = routeMs.entries.filter { it.value > 0 }.joinToString { "${it.key.key} ${it.value / 1000} s" }
+            log(
+                "stopped ${src?.name} @ $currentRate Hz after $seconds s, peak $peak, route ${route.key} ($routes), " +
+                    if (kept) "saved ${f!!.length() / 1024} KB" else if (wasSilent) "discarded (silent)" else "discarded (empty)",
+            )
         }
         file = null; current = null
         RecorderState.active.value = false
@@ -233,6 +277,8 @@ class RecorderService : Service() {
         const val EXTRA_INCOMING = "incoming"
         private const val TICK_MS = 500
         private const val CHECK_AFTER_MS = 6_000
+        /** Android's silenced flag is only read in the first seconds, where switching input still saves the call. */
+        private const val SILENCED_WATCH_MS = 10_000
 
         fun start(ctx: Context, number: String, incoming: Boolean) {
             val app = ctx.applicationContext
@@ -281,8 +327,11 @@ class RecorderService : Service() {
                 ActivityManager.RunningAppProcessInfo().also { ActivityManager.getMyMemoryState(it) }.importance
             } catch (_: Exception) { -1 }
             val mode = try { ctx.getSystemService(AudioManager::class.java).mode } catch (_: Exception) { -1 }
+            val a11y = try { AccessibilityHelper.isEnabled(ctx) } catch (_: Exception) { null }
+            val route = AudioRoutes.recordingRoute(CallHub.audio.value)
             return "mic permission ${if (mic) "on" else "OFF"}, default phone app ${dialer ?: "?"}, " +
-                "importance $importance (100 = on screen), audio mode $mode (2 = in call)"
+                "importance $importance (100 = on screen), audio mode $mode (2 = in call), " +
+                "accessibility helper ${when (a11y) { true -> "on"; false -> "off"; null -> "?" }}, route ${route.key}"
         }
     }
 

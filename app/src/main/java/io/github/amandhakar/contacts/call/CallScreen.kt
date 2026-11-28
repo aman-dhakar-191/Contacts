@@ -178,7 +178,7 @@ fun CallScreen(onClose: () -> Unit) {
                     Icon(Icons.Filled.FiberManualRecord, null, tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(6.dp))
                     Text(
-                        (if (bothSides) "Recording · $recLabel" else "Recording · $recLabel (your side + speaker)") +
+                        (if (bothSides) "Recording · $recLabel" else "Recording · $recLabel (microphone)") +
                             (recReason?.let { " · auto: $it" } ?: ""),
                         color = Color(0xFFFF8A80), fontSize = 14.sp,
                     )

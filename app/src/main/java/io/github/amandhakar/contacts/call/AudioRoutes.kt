@@ -1,6 +1,7 @@
 package io.github.amandhakar.contacts.call
 
 import android.telecom.CallAudioState
+import io.github.amandhakar.contacts.util.RecordingDiagnostics
 
 /** Where the call audio can go (phone earpiece, wired headset, Bluetooth, speaker) and how to name it. */
 object AudioRoutes {
@@ -37,4 +38,13 @@ object AudioRoutes {
 
     /** For the notification line: null when the audio is on the phone itself (nothing worth saying). */
     fun notificationLabel(a: CallAudioState?): String? = if (a?.route == CallAudioState.ROUTE_EARPIECE || a == null) null else currentLabel(a)
+
+    /** The route as a recording sees it. Never holds a Bluetooth device name. */
+    fun recordingRoute(a: CallAudioState?): RecordingDiagnostics.Route = when (a?.route) {
+        CallAudioState.ROUTE_SPEAKER -> RecordingDiagnostics.Route.SPEAKER
+        CallAudioState.ROUTE_BLUETOOTH -> RecordingDiagnostics.Route.BLUETOOTH
+        CallAudioState.ROUTE_WIRED_HEADSET -> RecordingDiagnostics.Route.WIRED
+        CallAudioState.ROUTE_EARPIECE -> RecordingDiagnostics.Route.EARPIECE
+        else -> RecordingDiagnostics.Route.UNKNOWN
+    }
 }

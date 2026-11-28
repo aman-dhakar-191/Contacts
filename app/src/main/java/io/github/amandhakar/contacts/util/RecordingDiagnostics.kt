@@ -101,4 +101,111 @@ object RecordingDiagnostics {
     fun encode(lines: List<String>): String = lines.joinToString("\n") { it.replace('\n', ' ') }
 
     fun decode(text: String?): List<String> = text?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+
+    // ---- Which input goes first ----
+
+    /**
+     * Orders the inputs to try (enum names). The input picked in Settings goes first unless the last recording test found
+     * it blocked or silent; then the input that last made a recording with sound; then inputs the test heard sound on;
+     * then the rest; inputs the test found blocked or silent go last. So a phone where only one input works starts on it,
+     * instead of losing the first seconds of every call to a silent input.
+     */
+    fun orderInputs(
+        base: List<String>,
+        preferred: String?,
+        lastWorking: String?,
+        testWorked: Set<String>,
+        testFailed: Set<String>,
+    ): List<String> {
+        val head = ArrayList<String>()
+        preferred?.takeIf { it in base && it !in testFailed }?.let(head::add)
+        lastWorking?.takeIf { it in base && it !in head }?.let(head::add)
+        val worked = base.filter { it in testWorked && it !in head }
+        val failed = base.filter { it in testFailed && it !in head && it !in testWorked }
+        val rest = base.filter { it !in head && it !in worked && it !in failed }
+        return head + worked + rest + failed
+    }
+
+    /** How long after starting Android's "this app is being fed silence" flag is trusted enough to switch input. */
+    const val SILENCED_CHECK_MS = 1_000
+
+    /**
+     * Switch to the next input now: Android has said on two checks in a row that it is feeding this app silence on this
+     * input, and there is another input to try. Saves waiting the full silence check on phones that block the microphone.
+     */
+    fun shouldSwitchSilenced(elapsedMs: Int, silencedChecksInARow: Int, hasNext: Boolean): Boolean =
+        hasNext && silencedChecksInARow >= 2 && elapsedMs >= SILENCED_CHECK_MS
+
+    // ---- What a recording holds (kept in its file name) ----
+
+    /** Where the call sound went while recording. */
+    enum class Route(val key: String, val label: String) {
+        SPEAKER("speaker", "speaker on"),
+        EARPIECE("earpiece", "earpiece"),
+        BLUETOOTH("bt", "Bluetooth"),
+        WIRED("wired", "wired headset"),
+        MIXED("mixed", "route changed during the call"),
+        UNKNOWN("unknown", "route unknown");
+
+        companion object {
+            fun fromKey(k: String?) = entries.firstOrNull { it.key == k }
+        }
+    }
+
+    /**
+     * The route for a whole recording, from how long the sound went each way. A route used under 2 s doesn't count
+     * (turning the speaker on right after recording starts would otherwise make every recording "route changed").
+     */
+    fun overallRoute(msPerRoute: Map<Route, Int>): Route {
+        val real = msPerRoute.filter { it.key != Route.UNKNOWN && it.value >= MIN_ROUTE_MS }.keys
+        return when {
+            real.size == 1 -> real.first()
+            real.size > 1 -> Route.MIXED
+            else -> msPerRoute.filter { it.key != Route.UNKNOWN && it.value > 0 }.maxByOrNull { it.value }?.key ?: Route.UNKNOWN
+        }
+    }
+
+    const val MIN_ROUTE_MS = 2_000
+
+    /**
+     * The file-name tag (third field of `<millis>_<in|out>_<tag>_<number>.m4a`). "both" = call audio; "mic" = an older
+     * microphone recording; "mic-<source>-<route>" = a microphone recording with the input and the route, e.g.
+     * "mic-voicerecognition-speaker". No underscores, because they split the file name.
+     */
+    fun captureTag(bothSides: Boolean, sourceName: String?, route: Route?): String {
+        if (bothSides) return "both"
+        val src = sourceName?.lowercase()?.filter { it.isLetterOrDigit() }.orEmpty()
+        return if (src.isEmpty() && route == null) "mic" else "mic-$src-${(route ?: Route.UNKNOWN).key}"
+    }
+
+    data class Capture(val bothSides: Boolean, val source: String?, val route: Route?)
+
+    fun parseCaptureTag(tag: String): Capture {
+        if (tag == "both") return Capture(true, null, null)
+        val p = tag.split('-')
+        if (p.size < 3 || p[0] != "mic") return Capture(false, null, null)
+        return Capture(false, p[1].ifEmpty { null }, Route.fromKey(p[2]))
+    }
+
+    /** Short words for the recordings list, e.g. "call audio" or "microphone (voice recognition), speaker on". */
+    fun captureLabel(c: Capture): String {
+        if (c.bothSides) return "call audio"
+        val src = when (c.source) {
+            null -> null
+            "voicerecognition" -> "voice recognition"
+            "voicecommunication" -> "voice communication"
+            "unprocessed" -> "unprocessed"
+            "mic" -> null
+            else -> c.source
+        }
+        return "microphone" + (src?.let { " ($it)" } ?: "") + (c.route?.let { ", ${it.label}" } ?: "")
+    }
+
+    /** Replaces the tag in a recording file name, keeping everything else. Returns null if the name isn't one of ours. */
+    fun withTag(fileName: String, tag: String): String? {
+        if (!fileName.endsWith(".m4a")) return null
+        val p = fileName.removeSuffix(".m4a").split('_', limit = 4)
+        if (p.size < 4) return null
+        return "${p[0]}_${p[1]}_${tag}_${p[3]}.m4a"
+    }
 }
