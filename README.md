@@ -34,6 +34,10 @@ system-only permission. So the app finds out what your phone allows instead of g
   sound on; inputs the test found blocked or silent go last, even if picked in Settings.
 - **Each recording says what it captured**: "call audio", or "microphone (voice recognition), speaker on" and so on, with the
   route (speaker, earpiece, Bluetooth, wired, or "route changed during the call"). Route changes are written to the log.
+- **Speaker fallback is off by default**: on some phones (POCO X6, HyperOS) the voice-recognition input records both voices
+  with the earpiece, so the speaker isn't turned on unless you switch Speaker fallback on.
+- **Auto-record decisions are logged**: each connected call adds an "auto-record check" line saying which rule matched or why
+  none did. The check runs on every call state and details change, because some phones skip one of them.
 - Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
   Microphone-type inputs record your voice, plus the other person only if the speaker is on. Each input is tried at a few
   sample rates (call inputs at 16 and 8 kHz first), because some phones only open them at low rates.

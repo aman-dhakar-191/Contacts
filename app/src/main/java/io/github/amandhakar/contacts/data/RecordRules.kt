@@ -51,6 +51,14 @@ class RecordRules(ctx: Context) {
             else -> null
         }
 
+        /** One line for the recording log saying why a call is or isn't recorded by itself. Holds no number. */
+        fun explain(all: Boolean, unknown: Boolean, inList: Boolean, isKnownContact: Boolean): String =
+            when (val r = decide(all, unknown, inList, isKnownContact)) {
+                null -> "not recording: Record all calls off, " +
+                    (if (!unknown) "Record unknown numbers off" else "number is a saved contact") + ", not on the auto-record list"
+                else -> "recording: ${r.label}"
+            }
+
         fun encode(list: List<RuleEntry>): String =
             list.joinToString("\n") { "${it.key}|${it.number.clean()}|${it.label.clean()}" }
 

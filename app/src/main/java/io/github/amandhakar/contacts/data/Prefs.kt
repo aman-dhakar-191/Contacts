@@ -134,9 +134,13 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putBoolean("bt_names", v).apply()
 
     /** When only the microphone can be recorded, switch to speaker so the other side is audible. */
+    /**
+     * Turn the speaker on when only a microphone input can record. Off by default: on some phones (POCO X6) the microphone
+     * input already records both voices with the earpiece. New key, so it starts off once for everyone after the change.
+     */
     var speakerForRecording: Boolean
-        get() = sp.getBoolean("speaker_for_recording", true)
-        set(v) = sp.edit().putBoolean("speaker_for_recording", v).apply()
+        get() = sp.getBoolean("speaker_for_recording_v2", false)
+        set(v) = sp.edit().putBoolean("speaker_for_recording_v2", v).apply()
 
     /** A [RecSource] enum name, or "auto". Set from the recording test. */
     var preferredSource: String
