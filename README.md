@@ -39,7 +39,8 @@ system-only permission. So the app finds out what your phone allows instead of g
 - **Auto-record decisions are logged**: each connected call adds an "auto-record check" line saying which rule matched or why
   none did. The check runs on every call state and details change, because some phones skip one of them.
 - Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
-  Microphone-type inputs record your voice, plus the other person only if the speaker is on. Each input is tried at a few
+  Microphone-type inputs record your voice; whether they also hear the other person depends on the phone (on a POCO X6
+  voice recognition does, even with the earpiece). Each input is tried at a few
   sample rates (call inputs at 16 and 8 kHz first), because some phones only open them at low rates.
 - **Recording log** (Settings → Recording test, at the bottom): every start, failure and stop, with the inputs tried, the step
   that failed and Android's error, plus whether the Microphone permission is on, whether this is the default phone app and
