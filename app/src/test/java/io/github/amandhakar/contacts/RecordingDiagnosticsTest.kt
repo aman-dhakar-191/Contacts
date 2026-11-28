@@ -109,9 +109,39 @@ class RecordingDiagnosticsTest {
         assertEquals(listOf("VOICE_RECOGNITION", "VOICE_CALL", "VOICE_COMMUNICATION", "UNPROCESSED", "MIC"), order)
     }
 
-    @Test fun pickedInputThatWorksStaysFirst() {
+    @Test fun inputThatRecordedARealCallBeatsThePickedOne() {
+        // Aman's 22:08 call: MIC still picked in Settings, no test saved; the call before recorded on voice recognition.
+        val order = RecordingDiagnostics.orderInputs(
+            listOf("MIC") + chain.filter { it != "MIC" }, "MIC", "VOICE_RECOGNITION", emptySet(), emptySet(),
+        )
+        assertEquals(listOf("VOICE_RECOGNITION", "MIC", "VOICE_CALL", "VOICE_COMMUNICATION", "UNPROCESSED"), order)
+    }
+
+    @Test fun pickedInputComesRightAfterTheLastWorkingOne() {
         val order = RecordingDiagnostics.orderInputs(chain, "UNPROCESSED", "VOICE_RECOGNITION", setOf("UNPROCESSED"), setOf("MIC"))
-        assertEquals(listOf("UNPROCESSED", "VOICE_RECOGNITION", "VOICE_CALL", "VOICE_COMMUNICATION", "MIC"), order)
+        assertEquals(listOf("VOICE_RECOGNITION", "UNPROCESSED", "VOICE_CALL", "VOICE_COMMUNICATION", "MIC"), order)
+        // With nothing recorded yet, the picked input goes first.
+        assertEquals("UNPROCESSED", RecordingDiagnostics.orderInputs(chain, "UNPROCESSED", null, emptySet(), emptySet()).first())
+    }
+
+    @Test fun silenceWaitGrowsEachRoundUpToAMinute() {
+        assertEquals(listOf(6, 12, 24, 48, 60, 60), (0..5).map { RecordingDiagnostics.silenceWindowMs(it) / 1000 })
+    }
+
+    @Test fun nextRoundSkipsInputsThatWontOpenAndMovesTheCurrentOneLast() {
+        // Aman's 20:02 call: everything silent, ended on UNPROCESSED; call audio never opened.
+        val order = listOf("MIC", "VOICE_CALL", "VOICE_RECOGNITION", "VOICE_COMMUNICATION", "UNPROCESSED")
+        assertEquals(
+            listOf("MIC", "VOICE_RECOGNITION", "VOICE_COMMUNICATION", "UNPROCESSED"),
+            RecordingDiagnostics.nextRound(order, setOf("VOICE_CALL"), "UNPROCESSED"),
+        )
+        assertEquals(
+            listOf("VOICE_COMMUNICATION", "UNPROCESSED", "MIC", "VOICE_RECOGNITION"),
+            RecordingDiagnostics.nextRound(
+                listOf("VOICE_RECOGNITION", "VOICE_COMMUNICATION", "UNPROCESSED", "MIC"), emptySet(), "VOICE_RECOGNITION",
+            ),
+        )
+        assertEquals(listOf("VOICE_RECOGNITION"), RecordingDiagnostics.nextRound(listOf("VOICE_RECOGNITION", "VOICE_CALL"), setOf("VOICE_CALL"), "VOICE_RECOGNITION"))
     }
 
     @Test fun noHistoryKeepsTheDefaultOrder() {

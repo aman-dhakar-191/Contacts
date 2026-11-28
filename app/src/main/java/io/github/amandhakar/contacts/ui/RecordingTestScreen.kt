@@ -165,7 +165,11 @@ fun ProbeControls(hasCall: Boolean) {
         results.forEach { r ->
             ResultRow(r, playing == r.file, preferred == r.source.name,
                 onPlay = { r.file?.let { f -> if (playing == f) stop() else play(f) } },
-                onUse = { prefs.preferredSource = r.source.name; preferred = r.source.name })
+                onUse = {
+                    prefs.preferredSource = r.source.name; preferred = r.source.name
+                    // An input the test heard sound on is also the one to start on next call.
+                    if (r.status == ProbeStatus.SIGNAL) prefs.lastWorkingSource = r.source.name
+                })
         }
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { prefs.preferredSource = "auto"; preferred = "auto" }) { Text(if (preferred == "auto") "Using Auto" else "Back to Auto") }
