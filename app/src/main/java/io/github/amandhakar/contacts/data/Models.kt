@@ -81,4 +81,6 @@ data class RecordingEntry(
     val number: String,
     val bothSides: Boolean,
     val sizeBytes: Long,
+    /** What was recorded, e.g. "call audio" or "microphone (voice recognition), speaker on". */
+    val captureLabel: String = if (bothSides) "call audio" else "microphone",
 )

@@ -445,7 +445,7 @@ fun RecordingsScreen(vm: AppViewModel) {
                         Text(
                             (if (r.incoming) "Incoming" else "Outgoing") + " · " +
                                 DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(r.date)) +
-                                " · " + (r.sizeBytes / 1024) + " KB" + if (r.bothSides) "" else " · your side only",
+                                " · " + (r.sizeBytes / 1024) + " KB · " + r.captureLabel,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

@@ -94,4 +94,18 @@ class AccountChoiceTest {
         val hidden = A.hiddenFor("|", keys)
         org.junit.Assert.assertEquals("|", A.singleShown(hidden, keys))
     }
+
+    @Test fun explainSaysWhyACallIsOrIsntRecorded() {
+        assertEquals("recording: auto-record list", RecordRules.explain(true, true, true, true))
+        assertEquals("recording: all calls", RecordRules.explain(true, false, false, true))
+        assertEquals("recording: unknown number", RecordRules.explain(false, true, false, false))
+        assertEquals(
+            "not recording: Record all calls off, number is a saved contact, not on the auto-record list",
+            RecordRules.explain(false, true, false, true),
+        )
+        assertEquals(
+            "not recording: Record all calls off, Record unknown numbers off, not on the auto-record list",
+            RecordRules.explain(false, false, false, false),
+        )
+    }
 }

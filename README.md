@@ -29,8 +29,18 @@ system-only permission. So the app finds out what your phone allows instead of g
   inputs capture sound (and whether Android is silencing the app on purpose), and lets you pick the one to use.
 - **Silence check on every recording**: loudness is read every half second. If an input is completely silent for 6 seconds
   it is blocked, so the recorder switches to the next input; a recording that stays silent is deleted instead of kept.
+  When Android says outright that it is silencing an input, the switch happens after about a second instead.
+- **Starts on the input that works**: the input that last recorded sound goes first, then the ones the recording test heard
+  sound on; inputs the test found blocked or silent go last, even if picked in Settings.
+- **Each recording says what it captured**: "call audio", or "microphone (voice recognition), speaker on" and so on, with the
+  route (speaker, earpiece, Bluetooth, wired, or "route changed during the call"). Route changes are written to the log.
+- **Speaker fallback is off by default**: on some phones (POCO X6, HyperOS) the voice-recognition input records both voices
+  with the earpiece, so the speaker isn't turned on unless you switch Speaker fallback on.
+- **Auto-record decisions are logged**: each connected call adds an "auto-record check" line saying which rule matched or why
+  none did. The check runs on every call state and details change, because some phones skip one of them.
 - Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
-  Microphone-type inputs record your voice, plus the other person only if the speaker is on. Each input is tried at a few
+  Microphone-type inputs record your voice; whether they also hear the other person depends on the phone (on a POCO X6
+  voice recognition does, even with the earpiece). Each input is tried at a few
   sample rates (call inputs at 16 and 8 kHz first), because some phones only open them at low rates.
 - **Recording log** (Settings → Recording test, at the bottom): every start, failure and stop, with the inputs tried, the step
   that failed and Android's error, plus whether the Microphone permission is on, whether this is the default phone app and
