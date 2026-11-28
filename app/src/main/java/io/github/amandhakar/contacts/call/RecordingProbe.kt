@@ -63,6 +63,7 @@ object RecordingProbe {
     fun start(ctx: Context): String? {
         val app = ctx.applicationContext
         if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            RecordingLog.add(app, "recording test not run: Microphone permission is off")
             return "Allow the Microphone permission first."
         }
         if (RecorderState.active.value) return "Stop the current recording first."
@@ -77,6 +78,8 @@ object RecordingProbe {
                     _results.value = out.toList()
                 }
                 Prefs(app).lastProbe = toJson(out)
+                RecordingLog.add(app, "recording test: " + out.joinToString("; ") { "${it.source.name} ${it.status.name} peak ${it.peak}" + if (it.silencedBySystem) " silenced" else "" } +
+                    "; accessibility helper ${if (AccessibilityHelper.isEnabled(app)) "on" else "off"}")
                 Telemetry.event("recording_test", *out.map { it.source.name to it.status.name }.toTypedArray(),
                     "a11y" to AccessibilityHelper.isEnabled(app), "far_side" to out.any { it.source.capturesFarSide && it.status == ProbeStatus.SIGNAL })
             } finally {

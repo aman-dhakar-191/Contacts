@@ -1,19 +1,29 @@
 package io.github.amandhakar.contacts.call
 
+import android.Manifest
+import android.app.ActivityManager
 import android.app.Service
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.data.RecSource
 import io.github.amandhakar.contacts.data.RecordingsRepo
 import io.github.amandhakar.contacts.util.AudioStats
+import io.github.amandhakar.contacts.util.RecordingDiagnostics
+import io.github.amandhakar.contacts.util.RecordingDiagnostics.Attempt
+import io.github.amandhakar.contacts.util.RecordingDiagnostics.Failure
+import io.github.amandhakar.contacts.util.RecordingDiagnostics.Step
 import io.github.amandhakar.contacts.util.Telemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
@@ -35,6 +45,7 @@ object RecorderState {
  * Records the current call. Tries the chosen input (see the recording test in Settings), then falls back down the list.
  * Every half second it reads the loudness: if the first seconds are completely silent the input is blocked, so it moves on to
  * the next one, and a recording that stays silent is deleted instead of being kept as an empty file.
+ * Every step is written to [RecordingLog], so a failure on a phone can be read back from Settings > Recording test.
  */
 class RecorderService : Service() {
     private var recorder: MediaRecorder? = null
@@ -45,6 +56,7 @@ class RecorderService : Service() {
     private var incoming = false
     private var peak = 0
     private var elapsedMs = 0
+    private var currentRate = 0
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -54,11 +66,13 @@ class RecorderService : Service() {
             elapsedMs += TICK_MS
             if (elapsedMs >= CHECK_AFTER_MS && AudioStats.isSilent(peak) && queue.isNotEmpty()) {
                 val bad = current
+                log("${bad?.name} silent for ${elapsedMs / 1000} s (peak $peak), trying the next input")
                 discardCurrent()
                 val started = startNext()
                 Telemetry.event("recording_silent_switch", "from" to bad?.name, "to" to (if (started) current?.name else "none"))
                 if (started) RecorderState.warning.value = "${bad?.label ?: "That input"} was silent, switched to ${current?.label}."
                 else {
+                    log("no input captured sound, stopped")
                     RecorderState.warning.value = "No input captured sound. Run the recording test in Settings."
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
@@ -85,7 +99,7 @@ class RecorderService : Service() {
     }
 
     private fun start(num: String, inc: Boolean) {
-        if (recorder != null) return
+        if (recorder != null) { log("start ignored: already recording ${current?.name}"); return }
         number = num; incoming = inc
         try {
             ServiceCompat.startForeground(
@@ -93,56 +107,87 @@ class RecorderService : Service() {
                 if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0,
             )
         } catch (e: Exception) {
-            RecorderState.error.value = "Allow the Microphone permission to record calls."
+            val failure = RecordingDiagnostics.classifyForegroundFailure(e.javaClass.name, hasMicPermission(this))
+            log("foreground service refused (${failure.name}): ${RecordingDiagnostics.errorText(e.javaClass.name, e.message)}; ${appState(this)}")
+            Telemetry.event("recording_failed", "reason" to failure.name.lowercase(), "error" to e.javaClass.simpleName)
+            Telemetry.nonFatal("recording_foreground", e)
+            RecorderState.error.value = RecordingDiagnostics.userMessage(failure)
             stopSelf(); return
         }
         queue.clear(); queue.addAll(RecSource.chain(Prefs(this).preferredSource))
+        log("inputs to try: ${queue.joinToString { it.name }}")
         if (!startNext()) {
             Telemetry.event("recording_failed", "reason" to "no_input_opened")
-            RecorderState.error.value = "This phone doesn't allow recording calls."
+            RecorderState.error.value = RecordingDiagnostics.userMessage(Failure.NO_INPUT)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
-    /** Starts recording on the next input in the queue that opens. */
+    /** Starts recording on the next input in the queue that opens. Each input is tried at a few sample rates. */
     private fun startNext(): Boolean {
         val repo = RecordingsRepo(this)
+        val failed = ArrayList<Attempt>()
         while (queue.isNotEmpty()) {
             val src = queue.removeFirst()
-            val f = repo.newFile(incoming, src == RecSource.VOICE_CALL, number)
-            @Suppress("DEPRECATION")
-            val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
-            try {
-                r.setAudioSource(src.id)
-                r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                r.setAudioEncodingBitRate(96_000)
-                r.setAudioSamplingRate(44_100)
-                r.setOutputFile(f.absolutePath)
-                r.prepare()
-                r.start()
-            } catch (_: Exception) {
-                try { r.release() } catch (_: Exception) {}
-                f.delete()
-                continue
+            for (rate in RecordingDiagnostics.sampleRates(src.capturesFarSide || src == RecSource.VOICE_UPLINK)) {
+                val f = repo.newFile(incoming, src == RecSource.VOICE_CALL, number)
+                @Suppress("DEPRECATION")
+                val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+                var step = Step.SOURCE
+                try {
+                    r.setAudioSource(src.id)
+                    step = Step.CONFIGURE
+                    r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    r.setAudioChannels(1)
+                    r.setAudioEncodingBitRate(RecordingDiagnostics.bitRate(rate))
+                    r.setAudioSamplingRate(rate)
+                    r.setOutputFile(f.absolutePath)
+                    step = Step.PREPARE
+                    r.prepare()
+                    step = Step.START
+                    r.start()
+                } catch (e: Exception) {
+                    try { r.release() } catch (_: Exception) {}
+                    f.delete()
+                    val a = Attempt(src.label, rate, step, RecordingDiagnostics.errorText(e.javaClass.name, e.message))
+                    failed += a
+                    log("${src.name} @ $rate Hz: ${RecordingDiagnostics.stepText(step)}: ${a.error}")
+                    // Android refuses the input itself: other sample rates won't help.
+                    if (step == Step.SOURCE) break
+                    continue
+                }
+                r.setOnErrorListener { _, what, extra -> onRecorderError(what, extra) }
+                recorder = r; file = f; current = src; currentRate = rate
+                log("recording ${src.name} @ $rate Hz" + if (failed.isEmpty()) "" else " (after: ${RecordingDiagnostics.summary(failed)})")
+                Telemetry.event(
+                    "recording_started", "source" to src.name, "both_sides" to (src == RecSource.VOICE_CALL),
+                    "auto_reason" to (RecorderState.reason.value ?: "manual"), "rate" to rate,
+                )
+                peak = 0; elapsedMs = 0
+                RecorderState.bothSides.value = src == RecSource.VOICE_CALL
+                RecorderState.sourceLabel.value = src.label
+                RecorderState.active.value = true
+                RecorderState.error.value = null
+                if (src != RecSource.VOICE_CALL && Prefs(this).speakerForRecording) CallHub.setSpeaker(true)
+                handler.removeCallbacks(tick)
+                handler.postDelayed(tick, TICK_MS.toLong())
+                return true
             }
-            recorder = r; file = f; current = src
-            Telemetry.event(
-                "recording_started", "source" to src.name, "both_sides" to (src == RecSource.VOICE_CALL),
-                "auto_reason" to (RecorderState.reason.value ?: "manual"),
-            )
-            peak = 0; elapsedMs = 0
-            RecorderState.bothSides.value = src == RecSource.VOICE_CALL
-            RecorderState.sourceLabel.value = src.label
-            RecorderState.active.value = true
-            RecorderState.error.value = null
-            if (src != RecSource.VOICE_CALL && Prefs(this).speakerForRecording) CallHub.setSpeaker(true)
-            handler.removeCallbacks(tick)
-            handler.postDelayed(tick, TICK_MS.toLong())
-            return true
         }
+        if (failed.isNotEmpty()) log("no input opened: ${RecordingDiagnostics.summary(failed)}")
         return false
+    }
+
+    /** MediaRecorder reported an error while running (e.g. the audio server restarted). Keep what was recorded. */
+    private fun onRecorderError(what: Int, extra: Int) {
+        log("recorder error on ${current?.name}: what=$what extra=$extra")
+        Telemetry.event("recording_error", "source" to current?.name, "what" to what, "extra" to extra)
+        RecorderState.error.value = RecordingDiagnostics.userMessage(Failure.RECORDER_DIED, "code $what/$extra")
+        finishRecording()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun stopRecorder() {
@@ -163,12 +208,18 @@ class RecorderService : Service() {
 
     private fun finishRecording() {
         val f = file
-        val wasSilent = recorder != null && AudioStats.isSilent(peak)
+        val wasRecording = recorder != null
+        val wasSilent = wasRecording && AudioStats.isSilent(peak)
+        val seconds = elapsedMs / 1000
         stopRecorder()
         if (f != null && (f.length() < 2_000 || wasSilent)) {
             f.delete()
             if (wasSilent) Telemetry.event("recording_discarded_silent", "source" to current?.name)
             if (wasSilent) RecorderState.warning.value = "The recording was silent and was discarded. Run the recording test in Settings."
+        }
+        if (wasRecording) {
+            val kept = f != null && f.exists()
+            log("stopped ${current?.name} @ $currentRate Hz after $seconds s, peak $peak, ${if (kept) "saved ${f!!.length() / 1024} KB" else if (wasSilent) "discarded (silent)" else "discarded (empty)"}")
         }
         file = null; current = null
         RecorderState.active.value = false
@@ -184,19 +235,56 @@ class RecorderService : Service() {
         private const val CHECK_AFTER_MS = 6_000
 
         fun start(ctx: Context, number: String, incoming: Boolean) {
+            val app = ctx.applicationContext
+            val trigger = RecorderState.reason.value ?: "tapped Record"
+            RecordingLog.add(app, "start ($trigger): ${deviceInfo()}; ${appState(app)}")
+            if (!hasMicPermission(app)) {
+                // Starting the service without the permission would make Android refuse it and could crash the app.
+                RecordingLog.add(app, "not started: Microphone permission is off")
+                Telemetry.event("recording_failed", "reason" to "no_permission")
+                RecorderState.error.value = RecordingDiagnostics.userMessage(Failure.NO_PERMISSION)
+                return
+            }
             try {
                 ctx.startForegroundService(
                     Intent(ctx, RecorderService::class.java).setAction(ACTION_START)
                         .putExtra(EXTRA_NUMBER, number).putExtra(EXTRA_INCOMING, incoming),
                 )
-            } catch (_: Exception) {
-                RecorderState.error.value = "Couldn't start recording."
+            } catch (e: Exception) {
+                val failure = RecordingDiagnostics.classifyForegroundFailure(e.javaClass.name, true)
+                val text = RecordingDiagnostics.errorText(e.javaClass.name, e.message)
+                RecordingLog.add(app, "service not started (${failure.name}): $text")
+                Telemetry.event("recording_failed", "reason" to "service_not_started", "error" to e.javaClass.simpleName)
+                RecorderState.error.value = RecordingDiagnostics.userMessage(
+                    if (failure == Failure.NOT_IN_FOREGROUND) failure else Failure.SERVICE_NOT_STARTED, e.javaClass.simpleName,
+                )
             }
         }
 
         fun stop(ctx: Context) {
             if (!RecorderState.active.value) return
+            RecordingLog.add(ctx.applicationContext, "stop requested")
             try { ctx.startService(Intent(ctx, RecorderService::class.java).setAction(ACTION_STOP)) } catch (_: Exception) {}
         }
+
+        fun hasMicPermission(ctx: Context) =
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+        private fun deviceInfo() =
+            "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}, build ${Build.VERSION.INCREMENTAL}"
+
+        /** Permission, default-phone-app role, whether the app is on screen, and the audio mode: what decides if recording may start. */
+        fun appState(ctx: Context): String {
+            val mic = hasMicPermission(ctx)
+            val dialer = try { ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_DIALER) } catch (_: Exception) { null }
+            val importance = try {
+                ActivityManager.RunningAppProcessInfo().also { ActivityManager.getMyMemoryState(it) }.importance
+            } catch (_: Exception) { -1 }
+            val mode = try { ctx.getSystemService(AudioManager::class.java).mode } catch (_: Exception) { -1 }
+            return "mic permission ${if (mic) "on" else "OFF"}, default phone app ${dialer ?: "?"}, " +
+                "importance $importance (100 = on screen), audio mode $mode (2 = in call)"
+        }
     }
+
+    private fun log(msg: String) = RecordingLog.add(applicationContext, msg)
 }
