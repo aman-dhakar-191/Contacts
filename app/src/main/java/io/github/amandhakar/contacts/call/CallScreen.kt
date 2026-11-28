@@ -113,9 +113,12 @@ fun CallScreen(onClose: () -> Unit) {
     LaunchedEffect(recWarning) {
         recWarning?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); RecorderState.warning.value = null }
     }
+    // Shown on the call screen until tapped: a toast is cut to two lines on new Android and these messages say what to do.
+    var shownRecError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(recError) {
-        recError?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); RecorderState.error.value = null }
+        recError?.let { shownRecError = it; RecorderState.error.value = null }
     }
+    LaunchedEffect(recording) { if (recording) shownRecError = null }
 
     val bg = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF16261F), Color(0xFF0B100E)))
     Box(Modifier.fillMaxSize().background(bg)) {
@@ -180,6 +183,14 @@ fun CallScreen(onClose: () -> Unit) {
                         color = Color(0xFFFF8A80), fontSize = 14.sp,
                     )
                 }
+            }
+            shownRecError?.let { msg ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    msg + "  (tap to hide)",
+                    color = Color(0xFFFF8A80), fontSize = 14.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp).clickable { shownRecError = null },
+                )
             }
             if (other != null && primary != null) {
                 Spacer(Modifier.height(12.dp))

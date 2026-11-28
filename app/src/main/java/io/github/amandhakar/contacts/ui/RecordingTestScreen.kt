@@ -45,6 +45,7 @@ import io.github.amandhakar.contacts.call.CallHub
 import io.github.amandhakar.contacts.call.ProbeResult
 import io.github.amandhakar.contacts.call.ProbeStatus
 import io.github.amandhakar.contacts.call.RecorderState
+import io.github.amandhakar.contacts.call.RecordingLog
 import io.github.amandhakar.contacts.call.RecordingProbe
 import io.github.amandhakar.contacts.data.Prefs
 import io.github.amandhakar.contacts.data.RecSource
@@ -55,8 +56,43 @@ fun RecordingTestScreen(vm: AppViewModel) {
     val calls by CallHub.calls.collectAsState()
     Page("Recording test", vm) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            Column(Modifier.padding(horizontal = 16.dp)) { ProbeControls(hasCall = calls.isNotEmpty()) }
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                ProbeControls(hasCall = calls.isNotEmpty())
+                Spacer(Modifier.height(24.dp))
+                RecordingLogSection()
+            }
         }
+    }
+}
+
+/** The last lines of [RecordingLog]: what happened when recording started, failed or stopped. Copy sends it all. */
+@Composable
+fun RecordingLogSection() {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { RecordingLog.load(ctx) }
+    val lines by RecordingLog.lines.collectAsState()
+    Text("Recording log", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "What happened each time a recording started, failed or stopped. Stays on this phone and never holds numbers or names. " +
+            "If recording fails, tap Copy and paste it to whoever is fixing it.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(enabled = lines.isNotEmpty(), onClick = {
+            val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Recording log", RecordingLog.text(ctx)))
+            Toast.makeText(ctx, "Recording log copied", Toast.LENGTH_SHORT).show()
+        }) { Text("Copy") }
+        TextButton(enabled = lines.isNotEmpty(), onClick = { RecordingLog.clear(ctx) }) { Text("Clear") }
+    }
+    if (lines.isEmpty()) {
+        Text("Nothing yet. Start a recording in a call.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        Text(
+            lines.takeLast(60).joinToString("\n"),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

@@ -30,7 +30,14 @@ system-only permission. So the app finds out what your phone allows instead of g
 - **Silence check on every recording**: loudness is read every half second. If an input is completely silent for 6 seconds
   it is blocked, so the recorder switches to the next input; a recording that stays silent is deleted instead of kept.
 - Inputs are tried in order: the one you chose, then call audio, voice recognition, voice communication, unprocessed mic, mic.
-  Microphone-type inputs record your voice, plus the other person only if the speaker is on.
+  Microphone-type inputs record your voice, plus the other person only if the speaker is on. Each input is tried at a few
+  sample rates (call inputs at 16 and 8 kHz first), because some phones only open them at low rates.
+- **Recording log** (Settings → Recording test, at the bottom): every start, failure and stop, with the inputs tried, the step
+  that failed and Android's error, plus whether the Microphone permission is on, whether this is the default phone app and
+  whether the app was on screen. Stays on the phone, never holds numbers or names, and has a Copy button. The same lines go to
+  logcat with the tag `ContactsRec`.
+- Errors stay on the call screen until tapped (a toast cuts them to two lines). Recording is not started at all when the
+  Microphone permission is off, because Android refuses a microphone service without it.
 
 ### Recording rules
 
