@@ -58,6 +58,10 @@ class RecorderService : Service() {
     private var elapsedMs = 0
     private var currentRate = 0
     private var silencedChecks = 0
+    /** Full order of inputs for this call, the inputs that wouldn't open, and how many times every input was silent. */
+    private var order: List<RecSource> = emptyList()
+    private val wontOpen = HashSet<RecSource>()
+    private var round = 0
     private var lastRoute: RecordingDiagnostics.Route? = null
     private val routeMs = HashMap<RecordingDiagnostics.Route, Int>()
     private val handler = Handler(Looper.getMainLooper())
@@ -72,18 +76,33 @@ class RecorderService : Service() {
                 r.activeRecordingConfiguration?.isClientSilenced
             } catch (_: Exception) { null }
             silencedChecks = if (silenced == true) silencedChecks + 1 else 0
-            val silencedNow = RecordingDiagnostics.shouldSwitchSilenced(elapsedMs, silencedChecks, queue.isNotEmpty())
-            if (silencedNow || (elapsedMs >= CHECK_AFTER_MS && AudioStats.isSilent(peak) && queue.isNotEmpty())) {
+            // Android's silenced flag only switches input on the first pass; later rounds wait out the silence window.
+            val silencedNow = round == 0 && RecordingDiagnostics.shouldSwitchSilenced(elapsedMs, silencedChecks, queue.isNotEmpty())
+            val silentTooLong = elapsedMs >= RecordingDiagnostics.silenceWindowMs(round) && AudioStats.isSilent(peak)
+            if (silencedNow || silentTooLong) {
                 val bad = current
                 log(
                     if (silencedNow) "${bad?.name} silenced by Android after ${elapsedMs / 1000.0} s, trying the next input"
                     else "${bad?.name} silent for ${elapsedMs / 1000} s (peak $peak), trying the next input",
                 )
+                if (queue.isEmpty()) {
+                    // Every input was silent. Never settle on a silent one: go round again, starting on the best other input.
+                    round++
+                    val next = RecordingDiagnostics.nextRound(order.map { it.name }, wontOpen.map { it.name }.toSet(), bad?.name)
+                    queue.addAll(next.mapNotNull { n -> RecSource.entries.firstOrNull { it.name == n } })
+                    log(
+                        "every input silent so far, trying again (round ${round + 1}, " +
+                            "${RecordingDiagnostics.silenceWindowMs(round) / 1000} s each): ${queue.joinToString { it.name }}",
+                    )
+                }
                 discardCurrent()
                 val started = startNext()
-                Telemetry.event("recording_silent_switch", "from" to bad?.name, "to" to (if (started) current?.name else "none"))
-                if (started) RecorderState.warning.value = "${bad?.label ?: "That input"} was silent, switched to ${current?.label}."
-                else {
+                Telemetry.event(
+                    "recording_silent_switch", "from" to bad?.name, "to" to (if (started) current?.name else "none"), "round" to round,
+                )
+                if (started) {
+                    if (round == 0) RecorderState.warning.value = "${bad?.label ?: "That input"} was silent, switched to ${current?.label}."
+                } else {
                     log("no input captured sound, stopped")
                     RecorderState.warning.value = "No input captured sound. Run the recording test in Settings."
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -134,7 +153,9 @@ class RecorderService : Service() {
         val order = RecordingDiagnostics.orderInputs(
             RecSource.chain(prefs.preferredSource).map { it.name }, picked, prefs.lastWorkingSource, worked, failedTest,
         )
-        queue.clear(); queue.addAll(order.mapNotNull { n -> RecSource.entries.firstOrNull { it.name == n } })
+        this.order = order.mapNotNull { n -> RecSource.entries.firstOrNull { it.name == n } }
+        wontOpen.clear(); round = 0
+        queue.clear(); queue.addAll(this.order)
         log(
             "inputs to try: ${queue.joinToString { it.name }} (picked ${picked ?: "auto"}, last with sound " +
                 "${prefs.lastWorkingSource ?: "none"}, test heard ${worked.ifEmpty { setOf("none") }.joinToString("/")})",
@@ -178,7 +199,8 @@ class RecorderService : Service() {
                     failed += a
                     log("${src.name} @ $rate Hz: ${RecordingDiagnostics.stepText(step)}: ${a.error}")
                     // Android refuses the input itself: other sample rates won't help.
-                    if (step == Step.SOURCE) break
+                    if (step == Step.SOURCE) { wontOpen += src; break }
+                    if (rate == RecordingDiagnostics.sampleRates(src.capturesFarSide || src == RecSource.VOICE_UPLINK).last()) wontOpen += src
                     continue
                 }
                 r.setOnErrorListener { _, what, extra -> onRecorderError(what, extra) }
@@ -276,7 +298,6 @@ class RecorderService : Service() {
         const val EXTRA_NUMBER = "number"
         const val EXTRA_INCOMING = "incoming"
         private const val TICK_MS = 500
-        private const val CHECK_AFTER_MS = 6_000
         /** Android's silenced flag is only read in the first seconds, where switching input still saves the call. */
         private const val SILENCED_WATCH_MS = 10_000
 

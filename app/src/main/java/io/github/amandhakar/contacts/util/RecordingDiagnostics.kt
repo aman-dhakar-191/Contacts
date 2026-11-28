@@ -105,10 +105,10 @@ object RecordingDiagnostics {
     // ---- Which input goes first ----
 
     /**
-     * Orders the inputs to try (enum names). The input picked in Settings goes first unless the last recording test found
-     * it blocked or silent; then the input that last made a recording with sound; then inputs the test heard sound on;
-     * then the rest; inputs the test found blocked or silent go last. So a phone where only one input works starts on it,
-     * instead of losing the first seconds of every call to a silent input.
+     * Orders the inputs to try (enum names). The input that last made a real call recording with sound goes first, because
+     * a real call is the best evidence; then the input picked in Settings, unless the last recording test found it blocked
+     * or silent; then inputs the test heard sound on; then the rest; inputs the test found blocked or silent go last. So a
+     * phone where only one input works starts on it, instead of losing the first seconds of every call to a silent input.
      */
     fun orderInputs(
         base: List<String>,
@@ -118,8 +118,8 @@ object RecordingDiagnostics {
         testFailed: Set<String>,
     ): List<String> {
         val head = ArrayList<String>()
-        preferred?.takeIf { it in base && it !in testFailed }?.let(head::add)
-        lastWorking?.takeIf { it in base && it !in head }?.let(head::add)
+        lastWorking?.takeIf { it in base }?.let(head::add)
+        preferred?.takeIf { it in base && it !in testFailed && it !in head }?.let(head::add)
         val worked = base.filter { it in testWorked && it !in head }
         val failed = base.filter { it in testFailed && it !in head && it !in testWorked }
         val rest = base.filter { it !in head && it !in worked && it !in failed }
@@ -135,6 +135,24 @@ object RecordingDiagnostics {
      */
     fun shouldSwitchSilenced(elapsedMs: Int, silencedChecksInARow: Int, hasNext: Boolean): Boolean =
         hasNext && silencedChecksInARow >= 2 && elapsedMs >= SILENCED_CHECK_MS
+
+    // ---- When every input is silent ----
+
+    /**
+     * How long an input may stay completely silent before the next one is tried. Round 0 is the first pass through the
+     * inputs; after that the inputs are tried again in turn with a longer wait each round (12 s, 24 s, 48 s, then every
+     * 60 s), because the call may not have had sound yet, or Android may stop silencing an input later in the call.
+     */
+    fun silenceWindowMs(round: Int): Int = minOf(6_000 shl round.coerceIn(0, 4), 60_000)
+
+    /**
+     * The inputs for the next round after every input was silent: the usual order without the inputs that wouldn't open,
+     * with the input in use moved to the end, so the round starts on the best other input.
+     */
+    fun nextRound(order: List<String>, wontOpen: Set<String>, current: String?): List<String> {
+        val usable = order.filter { it !in wontOpen }
+        return usable.filter { it != current } + usable.filter { it == current }
+    }
 
     // ---- What a recording holds (kept in its file name) ----
 
